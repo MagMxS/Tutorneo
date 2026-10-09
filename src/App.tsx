@@ -30,6 +30,34 @@ function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose:
   );
 }
 
+// ==================== CONFIRM MODAL ====================
+function ConfirmModal({ isOpen, onClose, onConfirm, title, message }: { isOpen: boolean; onClose: () => void; onConfirm: () => void; title: string; message: string }) {
+  if (!isOpen) return null;
+  return (
+    <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal-content max-w-md" onMouseDown={e => e.stopPropagation()}>
+        <div className="flex items-start gap-4 mb-6">
+          <div className="bg-red-500/20 p-3 rounded-full">
+            <AlertTriangle className="text-red-400" size={24} />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-bold text-white mb-2">{title}</h3>
+            <p className="text-gray-300">{message}</p>
+          </div>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-medium px-4 py-2 rounded-lg transition-colors">
+            Cancelar
+          </button>
+          <button onClick={() => { onConfirm(); onClose(); }} className="flex-1 btn-danger">
+            Eliminar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ==================== IMAGE UPLOADER ====================
 function ImageUploader({ value, onChange, label }: { value?: string; onChange: (v: string) => void; label: string }) {
   const [error, setError] = useState('');
@@ -120,6 +148,7 @@ function SuperAdminPanel({ user, onLogout }: { user: User; onLogout: () => void 
   const [showPassMap, setShowPassMap] = useState<Record<string, boolean>>({});
   const [resetUsername, setResetUsername] = useState('');
   const [resetPassword, setResetPassword] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState<{ type: 'tournament' | 'user'; id: string; name: string } | null>(null);
 
   const loadData = useCallback(() => {
     setTournaments(getDemoData<Tournament>(KEYS.tournaments));
@@ -145,16 +174,19 @@ function SuperAdminPanel({ user, onLogout }: { user: User; onLogout: () => void 
     setShowTournamentModal(false);
     loadData();
   };
-  const deleteTournament = (id: string) => {
-    if (confirm('¿Eliminar este torneo y todos sus datos asociados?')) {
-      removeDemoItem<Tournament>(KEYS.tournaments, id);
-      setDemoData<Team>(KEYS.teams, getDemoData<Team>(KEYS.teams).filter(t => t.tournamentId !== id));
-      setDemoData<Field>(KEYS.fields, getDemoData<Field>(KEYS.fields).filter(f => f.tournamentId !== id));
-      setDemoData<Match>(KEYS.matches, getDemoData<Match>(KEYS.matches).filter(m => m.tournamentId !== id));
-      setUsers(getDemoData<User>(KEYS.users).filter(u => u.tournamentId !== id || u.role === 'superadmin'));
-      setDemoData<User>(KEYS.users, getDemoData<User>(KEYS.users).filter(u => u.tournamentId !== id || u.role === 'superadmin'));
-      loadData();
-    }
+  const deleteTournament = (id: string, name: string) => {
+    setConfirmDelete({ type: 'tournament', id, name });
+  };
+  const confirmDeleteTournament = () => {
+    if (!confirmDelete || confirmDelete.type !== 'tournament') return;
+    const id = confirmDelete.id;
+    removeDemoItem<Tournament>(KEYS.tournaments, id);
+    setDemoData<Team>(KEYS.teams, getDemoData<Team>(KEYS.teams).filter(t => t.tournamentId !== id));
+    setDemoData<Field>(KEYS.fields, getDemoData<Field>(KEYS.fields).filter(f => f.tournamentId !== id));
+    setDemoData<Match>(KEYS.matches, getDemoData<Match>(KEYS.matches).filter(m => m.tournamentId !== id));
+    setDemoData<User>(KEYS.users, getDemoData<User>(KEYS.users).filter(u => u.tournamentId !== id || u.role === 'superadmin'));
+    setConfirmDelete(null);
+    loadData();
   };
 
   // User CRUD
@@ -179,8 +211,14 @@ function SuperAdminPanel({ user, onLogout }: { user: User; onLogout: () => void 
     setShowUserModal(false);
     loadData();
   };
-  const deleteUser = (id: string) => {
-    if (confirm('¿Eliminar este usuario?')) { removeDemoItem<User>(KEYS.users, id); loadData(); }
+  const deleteUser = (id: string, name: string) => {
+    setConfirmDelete({ type: 'user', id, name });
+  };
+  const confirmDeleteUser = () => {
+    if (!confirmDelete || confirmDelete.type !== 'user') return;
+    removeDemoItem<User>(KEYS.users, confirmDelete.id);
+    setConfirmDelete(null);
+    loadData();
   };
 
   const handleReset = () => {
@@ -237,7 +275,7 @@ function SuperAdminPanel({ user, onLogout }: { user: User; onLogout: () => void 
                     <span className="text-sm text-gray-400 capitalize">{t.sport === 'futbol' ? '⚽ Fútbol' : '🏈 Tochito'}</span>
                     <div className="flex gap-2 mt-2">
                       <button onClick={() => openTournamentModal(t)} className="text-blue-400 hover:text-blue-300"><Edit size={16} /></button>
-                      <button onClick={() => deleteTournament(t.id)} className="text-red-400 hover:text-red-300"><Trash2 size={16} /></button>
+                      <button onClick={() => deleteTournament(t.id, t.name)} className="text-red-400 hover:text-red-300"><Trash2 size={16} /></button>
                     </div>
                   </div>
                 </div>
@@ -283,7 +321,7 @@ function SuperAdminPanel({ user, onLogout }: { user: User; onLogout: () => void 
                         {u.role !== 'superadmin' && (
                           <div className="flex gap-2">
                             <button onClick={() => openUserModal(u)} className="text-blue-400 hover:text-blue-300"><Edit size={16} /></button>
-                            <button onClick={() => deleteUser(u.id)} className="text-red-400 hover:text-red-300"><Trash2 size={16} /></button>
+                            <button onClick={() => deleteUser(u.id, u.name)} className="text-red-400 hover:text-red-300"><Trash2 size={16} /></button>
                           </div>
                         )}
                       </td>
@@ -374,6 +412,17 @@ function SuperAdminPanel({ user, onLogout }: { user: User; onLogout: () => void 
           </button>
         </div>
       </Modal>
+
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        isOpen={confirmDelete !== null}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={confirmDelete?.type === 'tournament' ? confirmDeleteTournament : confirmDeleteUser}
+        title={confirmDelete?.type === 'tournament' ? 'Eliminar Torneo' : 'Eliminar Usuario'}
+        message={confirmDelete?.type === 'tournament'
+          ? `¿Eliminar el torneo "${confirmDelete?.name}" y todos sus datos asociados?`
+          : `¿Eliminar al usuario "${confirmDelete?.name}"?`}
+      />
     </div>
   );
 }
@@ -386,6 +435,7 @@ function AdminPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [users, setUsers] = useState<User[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [events, setEvents] = useState<MatchEvent[]>([]);
+  const [confirmDelete, setConfirmDelete] = useState<{ type: 'team' | 'field' | 'user' | 'match'; id: string; name: string } | null>(null);
   const tournament = getDemoData<Tournament>(KEYS.tournaments).find(t => t.id === user.tournamentId);
 
   const loadData = useCallback(() => {
@@ -414,7 +464,13 @@ function AdminPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
     else addDemoItem<Team>(KEYS.teams, { id: generateId(), name: teamForm.name, color: teamForm.color, logo: teamForm.logo, tournamentId: user.tournamentId! });
     setShowTeamModal(false); loadData();
   };
-  const deleteTeam = (id: string) => { if (confirm('¿Eliminar equipo?')) { removeDemoItem<Team>(KEYS.teams, id); loadData(); } };
+  const deleteTeam = (id: string, name: string) => { setConfirmDelete({ type: 'team', id, name }); };
+  const confirmDeleteTeam = () => {
+    if (!confirmDelete || confirmDelete.type !== 'team') return;
+    removeDemoItem<Team>(KEYS.teams, confirmDelete.id);
+    setConfirmDelete(null);
+    loadData();
+  };
 
   // Field CRUD
   const [showFieldModal, setShowFieldModal] = useState(false);
@@ -430,7 +486,13 @@ function AdminPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
     else addDemoItem<Field>(KEYS.fields, { id: generateId(), name: fieldForm.name, tournamentId: user.tournamentId! });
     setShowFieldModal(false); loadData();
   };
-  const deleteField = (id: string) => { if (confirm('¿Eliminar cancha?')) { removeDemoItem<Field>(KEYS.fields, id); loadData(); } };
+  const deleteField = (id: string, name: string) => { setConfirmDelete({ type: 'field', id, name }); };
+  const confirmDeleteField = () => {
+    if (!confirmDelete || confirmDelete.type !== 'field') return;
+    removeDemoItem<Field>(KEYS.fields, confirmDelete.id);
+    setConfirmDelete(null);
+    loadData();
+  };
 
   // User CRUD (referees/players)
   const [showUserModal, setShowUserModal] = useState(false);
@@ -447,7 +509,13 @@ function AdminPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
     else addDemoItem<User>(KEYS.users, { id: generateId(), ...uForm, tournamentId: user.tournamentId, teamId: uForm.role === 'player' ? uForm.teamId : undefined });
     setShowUserModal(false); loadData();
   };
-  const deleteUser = (id: string) => { if (confirm('¿Eliminar usuario?')) { removeDemoItem<User>(KEYS.users, id); loadData(); } };
+  const deleteUser = (id: string, name: string) => { setConfirmDelete({ type: 'user', id, name }); };
+  const confirmDeleteUser = () => {
+    if (!confirmDelete || confirmDelete.type !== 'user') return;
+    removeDemoItem<User>(KEYS.users, confirmDelete.id);
+    setConfirmDelete(null);
+    loadData();
+  };
 
   // Calendar generation
   const [showGenModal, setShowGenModal] = useState(false);
@@ -532,11 +600,18 @@ function AdminPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
   };
   const deleteMatch = (id: string) => {
     const m = matches.find(x => x.id === id);
-    if (m && confirm(`¿Eliminar partido ${teams.find(t => t.id === m.homeTeamId)?.name} vs ${teams.find(t => t.id === m.awayTeamId)?.name}?`)) {
-      removeDemoItem<Match>(KEYS.matches, id);
-      setDemoData<MatchEvent>(KEYS.events, getDemoData<MatchEvent>(KEYS.events).filter(e => e.matchId !== id));
-      loadData();
+    if (m) {
+      const homeName = teams.find(t => t.id === m.homeTeamId)?.name || 'Local';
+      const awayName = teams.find(t => t.id === m.awayTeamId)?.name || 'Visitante';
+      setConfirmDelete({ type: 'match', id, name: `${homeName} vs ${awayName}` });
     }
+  };
+  const confirmDeleteMatch = () => {
+    if (!confirmDelete || confirmDelete.type !== 'match') return;
+    removeDemoItem<Match>(KEYS.matches, confirmDelete.id);
+    setDemoData<MatchEvent>(KEYS.events, getDemoData<MatchEvent>(KEYS.events).filter(e => e.matchId !== confirmDelete.id));
+    setConfirmDelete(null);
+    loadData();
   };
 
   // Standings calculation
@@ -622,7 +697,7 @@ function AdminPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
                     <h3 className="font-bold">{t.name}</h3>
                     <div className="flex gap-2 mt-1">
                       <button onClick={() => openTeamModal(t)} className="text-blue-400 hover:text-blue-300"><Edit size={14} /></button>
-                      <button onClick={() => deleteTeam(t.id)} className="text-red-400 hover:text-red-300"><Trash2 size={14} /></button>
+                      <button onClick={() => deleteTeam(t.id, t.name)} className="text-red-400 hover:text-red-300"><Trash2 size={14} /></button>
                     </div>
                   </div>
                 </div>
@@ -644,7 +719,7 @@ function AdminPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
                   <div className="flex items-center gap-3"><MapPin className="text-green-400" size={20} /><span className="font-medium">{f.name}</span></div>
                   <div className="flex gap-2">
                     <button onClick={() => openFieldModal(f)} className="text-blue-400 hover:text-blue-300"><Edit size={14} /></button>
-                    <button onClick={() => deleteField(f.id)} className="text-red-400 hover:text-red-300"><Trash2 size={14} /></button>
+                    <button onClick={() => deleteField(f.id, f.name)} className="text-red-400 hover:text-red-300"><Trash2 size={14} /></button>
                   </div>
                 </div>
               ))}
@@ -673,7 +748,7 @@ function AdminPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
                       <td className="py-3 px-4 text-gray-300">{u.username}</td>
                       <td className="py-3 px-4"><span className={`text-xs px-2 py-1 rounded-full font-medium ${u.role === 'referee' ? 'bg-green-500/20 text-green-400' : u.role === 'player' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'}`}>{u.role === 'referee' ? '🏃 Árbitro' : u.role === 'player' ? '⚽ Jugador' : '👤 Admin'}</span></td>
                       <td className="py-3 px-4 text-gray-300 text-sm">{teams.find(t => t.id === u.teamId)?.name || '-'}</td>
-                      <td className="py-3 px-4"><div className="flex gap-2"><button onClick={() => openUserModal(u)} className="text-blue-400 hover:text-blue-300"><Edit size={14} /></button><button onClick={() => deleteUser(u.id)} className="text-red-400 hover:text-red-300"><Trash2 size={14} /></button></div></td>
+                      <td className="py-3 px-4"><div className="flex gap-2"><button onClick={() => openUserModal(u)} className="text-blue-400 hover:text-blue-300"><Edit size={14} /></button><button onClick={() => deleteUser(u.id, u.name)} className="text-red-400 hover:text-red-300"><Trash2 size={14} /></button></div></td>
                     </tr>
                   ))}
                 </tbody>
@@ -898,6 +973,29 @@ function AdminPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
           <button className="btn-primary w-full" onClick={saveMatch}>Guardar Cambios</button>
         </div>
       </Modal>
+
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        isOpen={confirmDelete !== null}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={
+          confirmDelete?.type === 'team' ? confirmDeleteTeam :
+          confirmDelete?.type === 'field' ? confirmDeleteField :
+          confirmDelete?.type === 'user' ? confirmDeleteUser :
+          confirmDeleteMatch
+        }
+        title={
+          confirmDelete?.type === 'team' ? 'Eliminar Equipo' :
+          confirmDelete?.type === 'field' ? 'Eliminar Cancha' :
+          confirmDelete?.type === 'user' ? 'Eliminar Usuario' :
+          'Eliminar Partido'
+        }
+        message={
+          confirmDelete?.type === 'match'
+            ? `¿Eliminar el partido "${confirmDelete?.name}"?`
+            : `¿Eliminar "${confirmDelete?.name}"?`
+        }
+      />
     </div>
   );
 }
