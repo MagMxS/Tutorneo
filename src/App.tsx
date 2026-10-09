@@ -18,8 +18,8 @@ import {
 function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
   if (!isOpen) return null;
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={onClose} onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-xl font-bold text-yellow-400">{title}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={24} /></button>
@@ -671,9 +671,9 @@ function AdminPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
                     <tr key={u.id} className="border-b border-gray-700/50">
                       <td className="py-3 px-4">{u.name}</td>
                       <td className="py-3 px-4 text-gray-300">{u.username}</td>
-                      <td className="py-3 px-4"><span className={`text-xs px-2 py-1 rounded-full ${u.role === 'referee' ? 'bg-green-500/20 text-green-400' : 'bg-purple-500/20 text-purple-400'}`}>{u.role === 'referee' ? 'Árbitro' : 'Jugador'}</span></td>
+                      <td className="py-3 px-4"><span className={`text-xs px-2 py-1 rounded-full font-medium ${u.role === 'referee' ? 'bg-green-500/20 text-green-400' : u.role === 'player' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'}`}>{u.role === 'referee' ? '🏃 Árbitro' : u.role === 'player' ? '⚽ Jugador' : '👤 Admin'}</span></td>
                       <td className="py-3 px-4 text-gray-300 text-sm">{teams.find(t => t.id === u.teamId)?.name || '-'}</td>
-                      <td className="py-3 px-4"><div className="flex gap-2"><button onClick={() => openUserModal(u)} className="text-blue-400"><Edit size={14} /></button><button onClick={() => deleteUser(u.id)} className="text-red-400"><Trash2 size={14} /></button></div></td>
+                      <td className="py-3 px-4"><div className="flex gap-2"><button onClick={() => openUserModal(u)} className="text-blue-400 hover:text-blue-300"><Edit size={14} /></button><button onClick={() => deleteUser(u.id)} className="text-red-400 hover:text-red-300"><Trash2 size={14} /></button></div></td>
                     </tr>
                   ))}
                 </tbody>
