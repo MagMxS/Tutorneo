@@ -1124,6 +1124,7 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [homeMvp, setHomeMvp] = useState('');
   const [awayMvp, setAwayMvp] = useState('');
+  const [showQuickAccess, setShowQuickAccess] = useState(false);
   const tournament = getDemoData<Tournament>(KEYS.tournaments).find(t => t.id === user.tournamentId);
   const currentWeek = getCurrentWeek();
 
@@ -1266,8 +1267,32 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
   const homeTeam = teams.find(t => t.id === activeMatch?.homeTeamId);
   const awayTeam = teams.find(t => t.id === activeMatch?.awayTeamId);
 
+  // Calcular partidos pendientes
+  const pendingMatches = weekMatches.filter(m => m.status === 'pendiente');
+  const hasActiveMatch = activeMatch !== null;
+
   return (
     <div className="min-h-screen bg-gray-900">
+      {/* Banner de partidos pendientes */}
+      {hasActiveMatch && pendingMatches.length > 0 && (
+        <div className="bg-gradient-to-r from-orange-600 to-red-600 text-white px-4 py-2">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={18} />
+              <span className="text-sm font-medium">
+                {pendingMatches.length} partido{pendingMatches.length !== 1 ? 's' : ''} pendiente{pendingMatches.length !== 1 ? 's' : ''} por iniciar
+              </span>
+            </div>
+            <button 
+              onClick={() => setShowQuickAccess(true)}
+              className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg text-sm font-medium transition-colors"
+            >
+              Ver partidos
+            </button>
+          </div>
+        </div>
+      )}
+
       <header className="bg-gray-800 border-b border-gray-700 px-4 py-3">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -1573,6 +1598,135 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
           )}
         </div>
       </Modal>
+
+      {/* Quick Access Modal */}
+      <Modal isOpen={showQuickAccess} onClose={() => setShowQuickAccess(false)} title="Gestión de Partidos">
+        <div className="space-y-4">
+          {/* Active match info */}
+          {activeMatch && (
+            <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                  <span className="font-bold text-green-400">Partido Activo</span>
+                </div>
+                <button 
+                  onClick={() => { setShowQuickAccess(false); }}
+                  className="btn-primary text-sm px-3 py-1"
+                >
+                  Volver al partido
+                </button>
+              </div>
+              <p className="text-sm text-gray-300">
+                {teams.find(t => t.id === activeMatch.homeTeamId)?.name} vs {teams.find(t => t.id === activeMatch.awayTeamId)?.name}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                Marcador: {activeMatch.homeScore} - {activeMatch.awayScore}
+              </p>
+            </div>
+          )}
+
+          {/* Pending matches */}
+          <div>
+            <h4 className="font-bold text-lg mb-3 text-yellow-400">
+              Partidos Pendientes ({pendingMatches.length})
+            </h4>
+            {pendingMatches.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">No hay partidos pendientes</p>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {pendingMatches.map(m => {
+                  const home = teams.find(t => t.id === m.homeTeamId);
+                  const away = teams.find(t => t.id === m.awayTeamId);
+                  return (
+                    <div key={m.id} className="bg-gray-700/50 rounded-lg p-3 flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: home?.color }} />
+                          <span className="font-medium text-sm">{home?.name}</span>
+                          <span className="text-gray-500 text-xs">vs</span>
+                          <span className="font-medium text-sm">{away?.name}</span>
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: away?.color }} />
+                        </div>
+                        <p className="text-xs text-gray-400">J{m.jornada} • {formatDate(m.date)} • {m.time}</p>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          setActiveMatch(m);
+                          setShowStartConfirm(true);
+                          setShowQuickAccess(false);
+                        }}
+                        className="btn-success text-sm px-3 py-1"
+                      >
+                        ▶️ Iniciar
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* My live matches */}
+          {matches.filter(m => m.status === 'en_vivo' && m.refereeId === user.id && m.id !== activeMatch?.id).length > 0 && (
+            <div>
+              <h4 className="font-bold text-lg mb-3 text-green-400">
+                Mis Otros Partidos en Vivo
+              </h4>
+              <div className="space-y-2">
+                {matches.filter(m => m.status === 'en_vivo' && m.refereeId === user.id && m.id !== activeMatch?.id).map(m => {
+                  const home = teams.find(t => t.id === m.homeTeamId);
+                  const away = teams.find(t => t.id === m.awayTeamId);
+                  return (
+                    <div key={m.id} className="bg-green-500/10 border border-green-500/30 rounded-lg p-3 flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: home?.color }} />
+                          <span className="font-medium text-sm">{home?.name}</span>
+                          <span className="text-gray-500 text-xs">vs</span>
+                          <span className="font-medium text-sm">{away?.name}</span>
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: away?.color }} />
+                        </div>
+                        <p className="text-xs text-gray-400">Marcador: {m.homeScore} - {m.awayScore}</p>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          setActiveMatch(m);
+                          setGracePeriod(null);
+                          setShowQuickAccess(false);
+                        }}
+                        className="btn-primary text-sm px-3 py-1"
+                      >
+                        📝 Continuar
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Floating Action Button */}
+      {hasActiveMatch && (
+        <button
+          onClick={() => setShowQuickAccess(true)}
+          className="fixed bottom-6 right-6 bg-gradient-to-r from-yellow-500 to-orange-500 text-gray-900 w-14 h-14 rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform z-40"
+          title="Gestión de partidos"
+        >
+          {pendingMatches.length > 0 ? (
+            <div className="relative">
+              <Calendar size={24} />
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
+                {pendingMatches.length}
+              </span>
+            </div>
+          ) : (
+            <Calendar size={24} />
+          )}
+        </button>
+      )}
     </div>
   );
 }
