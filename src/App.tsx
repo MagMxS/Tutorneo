@@ -1169,6 +1169,15 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
     setGracePeriod(null);
   };
 
+  const exitMatch = () => {
+    if (!activeMatch) return;
+    // Mantener el estado "en_vivo" pero liberar al árbitro temporalmente
+    // El partido seguirá en vivo pero el árbitro podrá iniciar otro
+    setActiveMatch(null);
+    setGracePeriod(null);
+    setRegisteredPlayers([]);
+  };
+
   useEffect(() => {
     if (gracePeriod) {
       const timer = setInterval(() => {
@@ -1387,8 +1396,18 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
               )}
             </div>
 
-            {/* Finish button */}
-            <button className="btn-danger w-full text-lg py-3" onClick={() => setShowFinishModal(true)}>🏁 Finalizar Partido</button>
+            {/* Action buttons */}
+            <div className="flex gap-3">
+              <button className="btn-secondary flex-1 text-lg py-3" onClick={exitMatch}>
+                🚪 Salir del Partido
+              </button>
+              <button className="btn-danger flex-1 text-lg py-3" onClick={() => setShowFinishModal(true)}>
+                🏁 Finalizar
+              </button>
+            </div>
+            <p className="text-center text-gray-500 text-sm">
+              💡 Al salir, el partido permanecerá en vivo y podrás volver a él desde la lista
+            </p>
           </div>
         ) : (
           /* Match list */
@@ -1399,8 +1418,9 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
                 {weekMatches.map(m => {
                   const home = teams.find(t => t.id === m.homeTeamId);
                   const away = teams.find(t => t.id === m.awayTeamId);
+                  const isMyLiveMatch = m.status === 'en_vivo' && m.refereeId === user.id;
                   return (
-                    <div key={m.id} className="card flex items-center justify-between">
+                    <div key={m.id} className={`card flex items-center justify-between ${isMyLiveMatch ? 'border-green-500' : ''}`}>
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: home?.color }} />
@@ -1410,12 +1430,27 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: away?.color }} />
                         </div>
                         <p className="text-sm text-gray-400">J{m.jornada} • {formatDate(m.date)} • {m.time}</p>
+                        {m.status === 'en_vivo' && (
+                          <p className="text-xs text-green-400 mt-1">
+                            {isMyLiveMatch ? '🔴 Tu partido en vivo' : '🔴 En vivo (otro árbitro)'}
+                          </p>
+                        )}
                       </div>
                       <div>
                         {m.status === 'pendiente' ? (
                           <button className="btn-success text-sm" onClick={() => { setActiveMatch(m); setShowStartConfirm(true); }}>▶️ Iniciar</button>
-                        ) : m.status === 'en_vivo' && m.refereeId === user.id ? (
-                          <button className="btn-primary text-sm" onClick={() => { setActiveMatch(m); setGracePeriod(null); }}>📝 Continuar</button>
+                        ) : isMyLiveMatch ? (
+                          <button className="btn-primary text-sm" onClick={() => { 
+                            setActiveMatch(m); 
+                            setGracePeriod(null);
+                            // Cargar jugadores registrados del partido
+                            const matchEvents = events.filter(e => e.matchId === m.id);
+                            const playerNames = [...new Set(matchEvents.map(e => e.playerName))];
+                            setRegisteredPlayers(playerNames.map(name => {
+                              const event = matchEvents.find(e => e.playerName === name);
+                              return { name, teamId: event?.teamId || '' };
+                            }));
+                          }}>📝 Continuar</button>
                         ) : (
                           <span className={`text-sm px-3 py-1 rounded-full ${m.status === 'finalizado' ? 'bg-gray-600 text-gray-300' : 'bg-green-500/20 text-green-400'}`}>
                             {m.status === 'finalizado' ? 'Finalizado' : 'En curso'}
