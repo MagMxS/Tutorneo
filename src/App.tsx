@@ -1585,6 +1585,8 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifPanel, setShowNotifPanel] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [showLiveDashboard, setShowLiveDashboard] = useState(false);
+  const [eventFilter, setEventFilter] = useState<string>('all');
   const tournament = getDemoData<Tournament>(KEYS.tournaments).find(t => t.id === user.tournamentId);
   const myTeam = getDemoData<Team>(KEYS.teams).find(t => t.id === user.teamId);
 
@@ -1610,7 +1612,34 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
 
   const myMatches = matches.filter(m => m.homeTeamId === user.teamId || m.awayTeamId === user.teamId);
   const finishedMatches = myMatches.filter(m => m.status === 'finalizado');
+  const liveMatches = myMatches.filter(m => m.status === 'en_vivo');
   const unreadNotifs = notifications.filter(n => !n.read).length;
+
+  // Live dashboard data
+  const liveMatch = liveMatches[0]; // Tomar el primer partido en vivo
+  const liveMatchEvents = liveMatch ? events.filter(e => e.matchId === liveMatch.id).sort((a, b) => b.timestamp - a.timestamp) : [];
+  const filteredLiveEvents = eventFilter === 'all' ? liveMatchEvents : liveMatchEvents.filter(e => e.type === eventFilter);
+  const homeTeamLive = liveMatch ? teams.find(t => t.id === liveMatch.homeTeamId) : null;
+  const awayTeamLive = liveMatch ? teams.find(t => t.id === liveMatch.awayTeamId) : null;
+  
+  // Stats comparison
+  const homeStats = liveMatch ? {
+    goals: events.filter(e => e.matchId === liveMatch.id && e.teamId === liveMatch.homeTeamId && e.type === 'gol').length,
+    yellowCards: events.filter(e => e.matchId === liveMatch.id && e.teamId === liveMatch.homeTeamId && e.type === 'yellow_card').length,
+    redCards: events.filter(e => e.matchId === liveMatch.id && e.teamId === liveMatch.homeTeamId && e.type === 'red_card').length,
+    touchdowns: events.filter(e => e.matchId === liveMatch.id && e.teamId === liveMatch.homeTeamId && e.type === 'touchdown').length,
+    conversions: events.filter(e => e.matchId === liveMatch.id && e.teamId === liveMatch.homeTeamId && (e.type === 'conversion_1' || e.type === 'conversion_2')).length,
+    sacks: events.filter(e => e.matchId === liveMatch.id && e.teamId === liveMatch.homeTeamId && e.type === 'sack').length,
+  } : null;
+  
+  const awayStats = liveMatch ? {
+    goals: events.filter(e => e.matchId === liveMatch.id && e.teamId === liveMatch.awayTeamId && e.type === 'gol').length,
+    yellowCards: events.filter(e => e.matchId === liveMatch.id && e.teamId === liveMatch.awayTeamId && e.type === 'yellow_card').length,
+    redCards: events.filter(e => e.matchId === liveMatch.id && e.teamId === liveMatch.awayTeamId && e.type === 'red_card').length,
+    touchdowns: events.filter(e => e.matchId === liveMatch.id && e.teamId === liveMatch.awayTeamId && e.type === 'touchdown').length,
+    conversions: events.filter(e => e.matchId === liveMatch.id && e.teamId === liveMatch.awayTeamId && (e.type === 'conversion_1' || e.type === 'conversion_2')).length,
+    sacks: events.filter(e => e.matchId === liveMatch.id && e.teamId === liveMatch.awayTeamId && e.type === 'sack').length,
+  } : null;
 
   // Standings
   const standings = (() => {
@@ -1680,6 +1709,230 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
           <h2 className="text-2xl font-bold">{myTeam?.name || 'Mi Equipo'}</h2>
           <p className="text-gray-400">{tournament?.name}</p>
         </div>
+
+        {/* Live Stats Dashboard */}
+        {liveMatches.length > 0 && (
+          <div className="card border-2 border-green-500/50 bg-gradient-to-br from-green-900/20 to-gray-800">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                <h3 className="text-xl font-bold text-green-400">📺 Partido en Vivo</h3>
+              </div>
+              <button 
+                onClick={() => setShowLiveDashboard(!showLiveDashboard)}
+                className="btn-secondary text-sm px-4 py-2"
+              >
+                {showLiveDashboard ? 'Ocultar Dashboard' : 'Ver Dashboard Completo'}
+              </button>
+            </div>
+
+            {/* Compact view - always visible */}
+            <div className="bg-gray-900/50 rounded-lg p-4 mb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full" style={{ backgroundColor: homeTeamLive?.color || '#666' }}></div>
+                  <span className="font-bold text-lg">{homeTeamLive?.name}</span>
+                </div>
+                <div className="text-center">
+                  <div className="text-4xl font-bold text-yellow-400">
+                    {liveMatch?.homeScore} - {liveMatch?.awayScore}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">J{liveMatch?.jornada} • Semana {liveMatch?.week}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-bold text-lg">{awayTeamLive?.name}</span>
+                  <div className="w-10 h-10 rounded-full" style={{ backgroundColor: awayTeamLive?.color || '#666' }}></div>
+                </div>
+              </div>
+              <div className="text-center mt-3">
+                <span className="text-sm text-gray-400">
+                  {liveMatchEvents.length} evento{liveMatchEvents.length !== 1 ? 's' : ''} registrado{liveMatchEvents.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+            </div>
+
+            {/* Full dashboard - toggleable */}
+            {showLiveDashboard && (
+              <div className="space-y-4">
+                {/* Stats Comparison */}
+                {homeStats && awayStats && (
+                  <div className="bg-gray-900/50 rounded-lg p-4">
+                    <h4 className="font-bold text-lg mb-3 text-center">📊 Comparativa de Equipos</h4>
+                    <div className="space-y-3">
+                      {tournament?.sport === 'futbol' ? (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-lg">{homeStats.goals}</span>
+                            <span className="text-sm text-gray-400">Goles</span>
+                            <span className="font-bold text-lg">{awayStats.goals}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-lg text-yellow-400">{homeStats.yellowCards}</span>
+                            <span className="text-sm text-gray-400">Tarjetas Amarillas</span>
+                            <span className="font-bold text-lg text-yellow-400">{awayStats.yellowCards}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-lg text-red-400">{homeStats.redCards}</span>
+                            <span className="text-sm text-gray-400">Tarjetas Rojas</span>
+                            <span className="font-bold text-lg text-red-400">{awayStats.redCards}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-lg">{homeStats.touchdowns}</span>
+                            <span className="text-sm text-gray-400">Touchdowns</span>
+                            <span className="font-bold text-lg">{awayStats.touchdowns}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-lg text-blue-400">{homeStats.conversions}</span>
+                            <span className="text-sm text-gray-400">Conversiones</span>
+                            <span className="font-bold text-lg text-blue-400">{awayStats.conversions}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-lg text-orange-400">{homeStats.sacks}</span>
+                            <span className="text-sm text-gray-400">Sacks</span>
+                            <span className="font-bold text-lg text-orange-400">{awayStats.sacks}</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Event Filters */}
+                <div className="bg-gray-900/50 rounded-lg p-4">
+                  <h4 className="font-bold text-lg mb-3">🔍 Filtrar Eventos</h4>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => setEventFilter('all')}
+                      className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
+                        eventFilter === 'all' ? 'bg-yellow-500 text-gray-900' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      Todos ({liveMatchEvents.length})
+                    </button>
+                    {tournament?.sport === 'futbol' ? (
+                      <>
+                        <button
+                          onClick={() => setEventFilter('gol')}
+                          className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
+                            eventFilter === 'gol' ? 'bg-green-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                          }`}
+                        >
+                          ⚽ Goles ({(homeStats?.goals || 0) + (awayStats?.goals || 0)})
+                        </button>
+                        <button
+                          onClick={() => setEventFilter('yellow_card')}
+                          className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
+                            eventFilter === 'yellow_card' ? 'bg-yellow-500 text-gray-900' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                          }`}
+                        >
+                          🟨 Amarillas ({(homeStats?.yellowCards || 0) + (awayStats?.yellowCards || 0)})
+                        </button>
+                        <button
+                          onClick={() => setEventFilter('red_card')}
+                          className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
+                            eventFilter === 'red_card' ? 'bg-red-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                          }`}
+                        >
+                          🟥 Rojas ({(homeStats?.redCards || 0) + (awayStats?.redCards || 0)})
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => setEventFilter('touchdown')}
+                          className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
+                            eventFilter === 'touchdown' ? 'bg-green-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                          }`}
+                        >
+                          🏈 TDs ({(homeStats?.touchdowns || 0) + (awayStats?.touchdowns || 0)})
+                        </button>
+                        <button
+                          onClick={() => setEventFilter('conversion_1')}
+                          className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
+                            eventFilter === 'conversion_1' ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                          }`}
+                        >
+                          1️⃣ Conv 1pt
+                        </button>
+                        <button
+                          onClick={() => setEventFilter('conversion_2')}
+                          className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
+                            eventFilter === 'conversion_2' ? 'bg-purple-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                          }`}
+                        >
+                          2️⃣ Conv 2pts
+                        </button>
+                        <button
+                          onClick={() => setEventFilter('sack')}
+                          className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
+                            eventFilter === 'sack' ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                          }`}
+                        >
+                          💪 Sacks ({(homeStats?.sacks || 0) + (awayStats?.sacks || 0)})
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Timeline of Events */}
+                <div className="bg-gray-900/50 rounded-lg p-4">
+                  <h4 className="font-bold text-lg mb-3">⏱️ Timeline de Eventos</h4>
+                  {filteredLiveEvents.length === 0 ? (
+                    <p className="text-gray-500 text-center py-4">No hay eventos registrados aún</p>
+                  ) : (
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {filteredLiveEvents.map((event, index) => {
+                        const eventTime = new Date(event.timestamp);
+                        const timeStr = eventTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                        const isHomeTeam = event.teamId === liveMatch?.homeTeamId;
+                        const teamColor = isHomeTeam ? homeTeamLive?.color : awayTeamLive?.color;
+                        
+                        return (
+                          <div key={event.id} className="flex items-start gap-3 bg-gray-800/50 rounded-lg p-3 border-l-4" style={{ borderColor: teamColor || '#666' }}>
+                            <div className="flex-shrink-0 text-2xl">
+                              {event.type === 'gol' && '⚽'}
+                              {event.type === 'yellow_card' && '🟨'}
+                              {event.type === 'red_card' && '🟥'}
+                              {event.type === 'touchdown' && '🏈'}
+                              {event.type === 'conversion_1' && '1️⃣'}
+                              {event.type === 'conversion_2' && '2️⃣'}
+                              {event.type === 'sack' && '💪'}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold">{event.playerName}</span>
+                                <span className="text-xs text-gray-400">{timeStr}</span>
+                              </div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-sm text-gray-400">{event.teamName}</span>
+                                {event.points > 0 && (
+                                  <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded">
+                                    +{event.points} pts
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Auto-refresh indicator */}
+                <div className="text-center">
+                  <p className="text-xs text-gray-500">
+                    🔄 Actualización automática cada 3 segundos
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* My matches */}
         <div>
