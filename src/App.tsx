@@ -1119,8 +1119,8 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
   const [manualPlayerName, setManualPlayerName] = useState('');
   const [manualPlayerTeam, setManualPlayerTeam] = useState('');
   const [registeredPlayers, setRegisteredPlayers] = useState<{ name: string; teamId: string }[]>([]);
-  const [newPlayerName, setNewPlayerName] = useState('');
-  const [newPlayerTeam, setNewPlayerTeam] = useState('');
+  const [homePlayerInput, setHomePlayerInput] = useState('');
+  const [awayPlayerInput, setAwayPlayerInput] = useState('');
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [homeMvp, setHomeMvp] = useState('');
   const [awayMvp, setAwayMvp] = useState('');
@@ -1140,6 +1140,15 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
 
   const weekMatches = matches.filter(m => m.week === currentWeek);
   const unreadNotifs = notifications.filter(n => !n.read).length;
+
+  // Sincronizar activeMatch con los datos actualizados (para marcador en vivo)
+  useEffect(() => {
+    if (!activeMatch) return;
+    const updated = matches.find(m => m.id === activeMatch.id);
+    if (updated && (updated.homeScore !== activeMatch.homeScore || updated.awayScore !== activeMatch.awayScore || updated.status !== activeMatch.status)) {
+      setActiveMatch(updated);
+    }
+  }, [matches, activeMatch]);
 
   const startMatch = (match: Match) => {
     updateDemoItem<Match>(KEYS.matches, match.id, { status: 'en_vivo', refereeId: user.id });
@@ -1165,10 +1174,16 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
     }
   }, [gracePeriod]);
 
-  const addRegisteredPlayer = () => {
-    if (!newPlayerName.trim()) return;
-    setRegisteredPlayers([...registeredPlayers, { name: newPlayerName.trim(), teamId: newPlayerTeam }]);
-    setNewPlayerName('');
+  const addHomePlayer = () => {
+    if (!homePlayerInput.trim() || !activeMatch) return;
+    setRegisteredPlayers([...registeredPlayers, { name: homePlayerInput.trim(), teamId: activeMatch.homeTeamId }]);
+    setHomePlayerInput('');
+  };
+
+  const addAwayPlayer = () => {
+    if (!awayPlayerInput.trim() || !activeMatch) return;
+    setRegisteredPlayers([...registeredPlayers, { name: awayPlayerInput.trim(), teamId: activeMatch.awayTeamId }]);
+    setAwayPlayerInput('');
   };
 
   const openEventModal = (type: MatchEvent['type']) => {
@@ -1298,10 +1313,9 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
                     {homeTeam?.name} (Local) - {homePlayers.length} jugadores
                   </h4>
                   <div className="flex gap-2">
-                    <input className="input-field text-sm" placeholder="Nombre jugador" value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addRegisteredPlayer()} />
-                    <button className="btn-primary text-sm px-3" onClick={addRegisteredPlayer}><Plus size={16} /></button>
+                    <input className="input-field text-sm" placeholder="Nombre jugador local" value={homePlayerInput} onChange={e => setHomePlayerInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addHomePlayer()} />
+                    <button className="btn-primary text-sm px-3" onClick={addHomePlayer}><Plus size={16} /></button>
                   </div>
-                  <input type="hidden" value={activeMatch.homeTeamId} ref={el => { if (el) setNewPlayerTeam(activeMatch.homeTeamId); }} />
                   {homePlayers.length === 0 && <p className="text-gray-500 text-xs mt-1">Sin jugadores</p>}
                   <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
                     {homePlayers.map((p, i) => <span key={i} className="text-xs bg-gray-700 px-2 py-1 rounded inline-block mr-1 mb-1">{p.name}</span>)}
@@ -1313,8 +1327,8 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
                     {awayTeam?.name} (Visitante) - {awayPlayers.length} jugadores
                   </h4>
                   <div className="flex gap-2">
-                    <input className="input-field text-sm" placeholder="Nombre jugador" value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { setNewPlayerTeam(activeMatch.awayTeamId); addRegisteredPlayer(); } }} />
-                    <button className="btn-primary text-sm px-3" onClick={() => { setNewPlayerTeam(activeMatch.awayTeamId); addRegisteredPlayer(); }}><Plus size={16} /></button>
+                    <input className="input-field text-sm" placeholder="Nombre jugador visitante" value={awayPlayerInput} onChange={e => setAwayPlayerInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addAwayPlayer()} />
+                    <button className="btn-primary text-sm px-3" onClick={addAwayPlayer}><Plus size={16} /></button>
                   </div>
                   {awayPlayers.length === 0 && <p className="text-gray-500 text-xs mt-1">Sin jugadores</p>}
                   <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
@@ -1540,6 +1554,16 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
   }, [user.tournamentId]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Polling para actualizar estadísticas en vivo cada 3 segundos
+  useEffect(() => {
+    const hasLiveMatch = matches.some(m => m.status === 'en_vivo');
+    if (!hasLiveMatch) return;
+    const interval = setInterval(() => {
+      loadData();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [matches, loadData]);
 
   const myMatches = matches.filter(m => m.homeTeamId === user.teamId || m.awayTeamId === user.teamId);
   const finishedMatches = myMatches.filter(m => m.status === 'finalizado');
