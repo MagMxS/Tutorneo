@@ -1147,6 +1147,10 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
     const updated = matches.find(m => m.id === activeMatch.id);
     if (updated && (updated.homeScore !== activeMatch.homeScore || updated.awayScore !== activeMatch.awayScore || updated.status !== activeMatch.status)) {
       setActiveMatch(updated);
+      // Si el partido fue finalizado, limpiar para permitir iniciar otro
+      if (updated.status === 'finalizado') {
+        setTimeout(() => setActiveMatch(null), 100);
+      }
     }
   }, [matches, activeMatch]);
 
@@ -1236,8 +1240,12 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
       homeMvp: tournament?.sport === 'tochito' ? homeMvp : undefined,
       awayMvp: tournament?.sport === 'tochito' ? awayMvp : undefined,
     });
+    // Limpiar estados para permitir iniciar otro partido
     setActiveMatch(null);
     setShowFinishModal(false);
+    setRegisteredPlayers([]);
+    setHomeMvp('');
+    setAwayMvp('');
     loadData();
   };
 
