@@ -1280,7 +1280,7 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
     }
     
     // Update score
-    const matchEvents = [...getDemoData<MatchEvent>(KEYS.events), newEvent];
+    const matchEvents = getDemoData<MatchEvent>(KEYS.events);
     const matchEventsForMatch = matchEvents.filter(e => e.matchId === activeMatch.id);
     const homeScore = matchEventsForMatch.filter(e => e.teamId === activeMatch.homeTeamId).reduce((s, e) => s + e.points, 0);
     const awayScore = matchEventsForMatch.filter(e => e.teamId === activeMatch.awayTeamId).reduce((s, e) => s + e.points, 0);
