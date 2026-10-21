@@ -3,10 +3,11 @@ import {
   Trophy, Users, Settings, LogOut, Eye, EyeOff, Plus, Edit, Trash2,
   Calendar, Clock, MapPin, Bell, Check, X, AlertTriangle, Star,
   ChevronDown, ChevronUp, User as UserIcon, Shield, Target, Award,
-  Undo, FileText, AlertCircle
+  Undo, FileText, AlertCircle, Download
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
+import * as XLSX from 'xlsx';
 import {
   User, Tournament, Team, Field, Match, MatchEvent, Notification,
   AppConfig, SportType, MatchStatus, StandingRow, ScorerRow
@@ -2301,6 +2302,115 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
     return Object.values(map).sort((a, b) => b.goals - a.goals);
   })();
 
+  // Funciones de exportación a Excel
+  const exportMatchesToExcel = () => {
+    const data = myMatches.map(m => {
+      const home = teams.find(t => t.id === m.homeTeamId);
+      const away = teams.find(t => t.id === m.awayTeamId);
+      return {
+        'Jornada': m.jornada,
+        'Fecha': formatDate(m.date),
+        'Hora': m.time,
+        'Local': home?.name || 'N/A',
+        'Visitante': away?.name || 'N/A',
+        'Marcador': m.status === 'finalizado' || m.status === 'en_vivo' ? `${m.homeScore} - ${m.awayScore}` : 'vs',
+        'Estado': m.status === 'en_vivo' ? 'En Vivo' : m.status === 'finalizado' ? 'Finalizado' : 'Pendiente',
+        'Semana': m.week
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Mis Partidos');
+    
+    // Ajustar anchos de columna
+    ws['!cols'] = [
+      { wch: 10 }, // Jornada
+      { wch: 15 }, // Fecha
+      { wch: 8 },  // Hora
+      { wch: 20 }, // Local
+      { wch: 20 }, // Visitante
+      { wch: 12 }, // Marcador
+      { wch: 12 }, // Estado
+      { wch: 8 }   // Semana
+    ];
+
+    XLSX.writeFile(wb, `Mis_Partidos_${myTeam?.name || 'Equipo'}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const exportStandingsToExcel = () => {
+    const data = standings.map((row, index) => ({
+      'Posición': index + 1,
+      'Equipo': row.teamName,
+      'JJ': row.jj,
+      'G': row.g,
+      'E': row.e,
+      'P': row.p,
+      'GF': row.gf,
+      'GC': row.gc,
+      'Dif': row.dif,
+      'Pts': row.pts
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Tabla de Posiciones');
+    
+    // Ajustar anchos de columna
+    ws['!cols'] = [
+      { wch: 10 }, // Posición
+      { wch: 25 }, // Equipo
+      { wch: 6 },  // JJ
+      { wch: 6 },  // G
+      { wch: 6 },  // E
+      { wch: 6 },  // P
+      { wch: 6 },  // GF
+      { wch: 6 },  // GC
+      { wch: 6 },  // Dif
+      { wch: 6 }   // Pts
+    ];
+
+    XLSX.writeFile(wb, `Tabla_Posiciones_${tournament?.name || 'Torneo'}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const exportScorersToExcel = () => {
+    const data = scorers.map((scorer, index) => {
+      const baseData: any = {
+        'Posición': index + 1,
+        'Jugador': scorer.playerName,
+        'Equipo': scorer.teamName,
+        [tournament?.sport === 'futbol' ? 'Goles' : 'Touchdowns']: scorer.goals
+      };
+      
+      if (tournament?.sport === 'tochito') {
+        baseData['MVPs'] = scorer.mvps || 0;
+      }
+      
+      return baseData;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, tournament?.sport === 'futbol' ? 'Goleadores' : 'Anotadores');
+    
+    // Ajustar anchos de columna
+    const cols = [
+      { wch: 10 }, // Posición
+      { wch: 25 }, // Jugador
+      { wch: 25 }, // Equipo
+      { wch: 12 }  // Goles/Touchdowns
+    ];
+    
+    if (tournament?.sport === 'tochito') {
+      cols.push({ wch: 8 }); // MVPs
+    }
+    
+    ws['!cols'] = cols;
+
+    const fileName = tournament?.sport === 'futbol' ? 'Goleadores' : 'Anotadores';
+    XLSX.writeFile(wb, `${fileName}_${tournament?.name || 'Torneo'}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   return (
     <div className="min-h-screen bg-gray-900">
       <header className="bg-gray-800 border-b border-gray-700 px-4 py-3">
@@ -2332,6 +2442,40 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
           )}
           <h2 className="text-2xl font-bold">{myTeam?.name || 'Mi Equipo'}</h2>
           <p className="text-gray-400">{tournament?.name}</p>
+        </div>
+
+        {/* Download Section */}
+        <div className="card">
+          <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+            <Download className="text-blue-400" size={24} />
+            Descargar Estadísticas
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <button 
+              onClick={exportMatchesToExcel}
+              className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-4 py-3 rounded-lg font-medium transition-all shadow-lg hover:shadow-xl"
+            >
+              <Download size={20} />
+              Mis Partidos
+            </button>
+            <button 
+              onClick={exportStandingsToExcel}
+              className="flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-3 rounded-lg font-medium transition-all shadow-lg hover:shadow-xl"
+            >
+              <Download size={20} />
+              Tabla de Posiciones
+            </button>
+            <button 
+              onClick={exportScorersToExcel}
+              className="flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-4 py-3 rounded-lg font-medium transition-all shadow-lg hover:shadow-xl"
+            >
+              <Download size={20} />
+              {tournament?.sport === 'futbol' ? 'Goleadores' : 'Anotadores'}
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 mt-3 text-center">
+            📊 Los archivos se descargan en formato Excel (.xlsx)
+          </p>
         </div>
 
         {/* Live Stats Dashboard */}
