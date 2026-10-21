@@ -1125,6 +1125,10 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
   const [homeMvp, setHomeMvp] = useState('');
   const [awayMvp, setAwayMvp] = useState('');
   const [showQuickAccess, setShowQuickAccess] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editHomeScore, setEditHomeScore] = useState(0);
+  const [editAwayScore, setEditAwayScore] = useState(0);
+  const [editTimeLeft, setEditTimeLeft] = useState(300); // 5 minutos en segundos
   const tournament = getDemoData<Tournament>(KEYS.tournaments).find(t => t.id === user.tournamentId);
   const currentWeek = getCurrentWeek();
 
@@ -1188,6 +1192,22 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
     }
   }, [gracePeriod]);
 
+  // Timer para período de edición post-finalización (5 minutos)
+  useEffect(() => {
+    if (showEditModal && editTimeLeft > 0) {
+      const timer = setInterval(() => {
+        setEditTimeLeft(prev => {
+          if (prev <= 1) {
+            setShowEditModal(false);
+            return 300;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [showEditModal, editTimeLeft]);
+
   const addHomePlayer = () => {
     if (!homePlayerInput.trim() || !activeMatch) return;
     setRegisteredPlayers([...registeredPlayers, { name: homePlayerInput.trim(), teamId: activeMatch.homeTeamId }]);
@@ -1245,17 +1265,64 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
   const finishMatch = () => {
     if (!activeMatch) return;
     if (tournament?.sport === 'tochito' && (!homeMvp || !awayMvp)) { alert('Debes seleccionar MVPs'); return; }
-    updateDemoItem<Match>(KEYS.matches, activeMatch.id, {
+    
+    const matchId = activeMatch.id;
+    const finalHomeScore = activeMatch.homeScore;
+    const finalAwayScore = activeMatch.awayScore;
+    
+    updateDemoItem<Match>(KEYS.matches, matchId, {
       status: 'finalizado', finishedAt: new Date().toISOString(),
       homeMvp: tournament?.sport === 'tochito' ? homeMvp : undefined,
       awayMvp: tournament?.sport === 'tochito' ? awayMvp : undefined,
     });
+    
     // Limpiar estados para permitir iniciar otro partido
     setActiveMatch(null);
     setShowFinishModal(false);
     setRegisteredPlayers([]);
     setHomeMvp('');
     setAwayMvp('');
+    loadData();
+    
+    // Abrir modal de edición automáticamente
+    setEditHomeScore(finalHomeScore);
+    setEditAwayScore(finalAwayScore);
+    setEditTimeLeft(300); // Resetear a 5 minutos
+    setShowEditModal(true);
+  };
+
+  const saveEditedResult = () => {
+    // Buscar el último partido finalizado por este árbitro
+    const myFinishedMatches = matches.filter(m => 
+      m.status === 'finalizado' && 
+      m.refereeId === user.id
+    ).sort((a, b) => {
+      const timeA = a.finishedAt ? new Date(a.finishedAt).getTime() : 0;
+      const timeB = b.finishedAt ? new Date(b.finishedAt).getTime() : 0;
+      return timeB - timeA; // Más reciente primero
+    });
+    
+    if (myFinishedMatches.length === 0) return;
+    
+    const lastMatch = myFinishedMatches[0];
+    
+    // Verificar que esté dentro del período de 5 minutos
+    if (lastMatch.finishedAt) {
+      const elapsed = Date.now() - new Date(lastMatch.finishedAt).getTime();
+      if (elapsed > 5 * 60 * 1000) {
+        alert('⏰ El período de edición ha expirado');
+        setShowEditModal(false);
+        return;
+      }
+    }
+    
+    updateDemoItem<Match>(KEYS.matches, lastMatch.id, {
+      homeScore: editHomeScore,
+      awayScore: editAwayScore,
+    });
+    
+    setShowEditModal(false);
+    setEditTimeLeft(300);
     loadData();
   };
 
@@ -1572,6 +1639,96 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
             </div>
           )}
           <button className="btn-danger w-full" onClick={finishMatch} disabled={tournament?.sport === 'tochito' && (!homeMvp || !awayMvp)}>🏁 Finalizar Partido</button>
+        </div>
+      </Modal>
+
+      {/* Banner con timer de edición */}
+      {showEditModal && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-40 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg shadow-2xl flex items-center gap-4 animate-pulse">
+          <div className="flex items-center gap-2">
+            <Clock size={20} className="animate-spin" />
+            <span className="font-bold">Período de edición:</span>
+            <span className="font-mono text-xl font-bold">
+              {Math.floor(editTimeLeft / 60)}:{String(editTimeLeft % 60).padStart(2, '0')}
+            </span>
+          </div>
+          <button 
+            onClick={() => setShowEditModal(true)}
+            className="bg-white text-blue-600 px-4 py-1 rounded-lg font-bold hover:bg-blue-50 transition-colors"
+          >
+            Editar Resultado
+          </button>
+        </div>
+      )}
+
+      {/* Modal de edición post-finalización */}
+      <Modal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title="Editar Resultado Final">
+        <div className="space-y-4">
+          {/* Timer visible */}
+          <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 text-center">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <Clock size={20} className="text-blue-400" />
+              <span className="text-blue-300 font-medium">Tiempo restante para editar:</span>
+            </div>
+            <div className="text-4xl font-bold font-mono text-blue-400">
+              {Math.floor(editTimeLeft / 60)}:{String(editTimeLeft % 60).padStart(2, '0')}
+            </div>
+            <p className="text-xs text-gray-400 mt-2">Después de este tiempo, el resultado se bloqueará permanentemente</p>
+          </div>
+
+          {/* Editar marcador */}
+          <div className="bg-gray-700/50 rounded-lg p-4">
+            <h4 className="font-bold text-lg mb-3 text-center">Marcador Final</h4>
+            <div className="flex items-center justify-center gap-4">
+              <div className="text-center">
+                <label className="text-sm text-gray-400 block mb-1">Local</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={editHomeScore}
+                  onChange={(e) => setEditHomeScore(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="input-field text-center text-2xl font-bold w-24"
+                />
+              </div>
+              <div className="text-3xl font-bold text-gray-500">-</div>
+              <div className="text-center">
+                <label className="text-sm text-gray-400 block mb-1">Visitante</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={editAwayScore}
+                  onChange={(e) => setEditAwayScore(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="input-field text-center text-2xl font-bold w-24"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Información */}
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 text-sm text-yellow-300">
+            <p className="font-medium mb-1">⚠️ Importante:</p>
+            <ul className="list-disc list-inside space-y-1 text-xs">
+              <li>Solo puedes editar el marcador final</li>
+              <li>Los eventos individuales (goles, tarjetas) no se pueden modificar</li>
+              <li>Después de 5 minutos, el resultado se bloqueará permanentemente</li>
+            </ul>
+          </div>
+
+          {/* Botones */}
+          <div className="flex gap-3">
+            <button 
+              onClick={() => setShowEditModal(false)}
+              className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+            >
+              Cancelar
+            </button>
+            <button 
+              onClick={saveEditedResult}
+              className="flex-1 btn-primary"
+            >
+              💾 Guardar Cambios
+            </button>
+          </div>
         </div>
       </Modal>
 
