@@ -2,8 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Trophy, Users, Settings, LogOut, Eye, EyeOff, Plus, Edit, Trash2,
   Calendar, Clock, MapPin, Bell, Check, X, AlertTriangle, Star,
-  ChevronDown, ChevronUp, User as UserIcon, Shield, Target, Award
+  ChevronDown, ChevronUp, User as UserIcon, Shield, Target, Award,
+  Undo, FileText, AlertCircle
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import confetti from 'canvas-confetti';
 import {
   User, Tournament, Team, Field, Match, MatchEvent, Notification,
   AppConfig, SportType, MatchStatus, StandingRow, ScorerRow
@@ -1129,6 +1132,16 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
   const [editHomeScore, setEditHomeScore] = useState(0);
   const [editAwayScore, setEditAwayScore] = useState(0);
   const [editTimeLeft, setEditTimeLeft] = useState(300); // 5 minutos en segundos
+  
+  // Nuevos estados para funcionalidades mejoradas
+  const [lastEventId, setLastEventId] = useState<string | null>(null);
+  const [undoTimer, setUndoTimer] = useState<number>(0);
+  const [showIncidentModal, setShowIncidentModal] = useState(false);
+  const [incidentType, setIncidentType] = useState<'lesion' | 'conducta' | 'cancha' | 'otro'>('lesion');
+  const [incidentDetails, setIncidentDetails] = useState('');
+  const [showAnimation, setShowAnimation] = useState<string | null>(null);
+  const [showActaModal, setShowActaModal] = useState(false);
+  
   const tournament = getDemoData<Tournament>(KEYS.tournaments).find(t => t.id === user.tournamentId);
   const currentWeek = getCurrentWeek();
 
@@ -1241,6 +1254,30 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
       teamName: team?.name || '', type: selectedEventType, points: pointsMap[selectedEventType] || 0, timestamp: Date.now()
     };
     addDemoItem<MatchEvent>(KEYS.events, newEvent);
+    
+    // Trackear último evento para deshacer
+    setLastEventId(newEvent.id);
+    setUndoTimer(30);
+    
+    // Animaciones y feedback visual
+    if (selectedEventType === 'gol' || selectedEventType === 'touchdown') {
+      setShowAnimation(selectedEventType);
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+      setTimeout(() => setShowAnimation(null), 2000);
+    } else if (selectedEventType === 'red_card') {
+      setShowAnimation('red_card');
+      setTimeout(() => setShowAnimation(null), 1500);
+    }
+    
+    // Vibración en móvil
+    if ('vibrate' in navigator) {
+      navigator.vibrate(selectedEventType === 'gol' || selectedEventType === 'touchdown' ? [100, 50, 100] : 100);
+    }
+    
     // Update score
     const matchEvents = [...getDemoData<MatchEvent>(KEYS.events), newEvent];
     const matchEventsForMatch = matchEvents.filter(e => e.matchId === activeMatch.id);
@@ -1260,6 +1297,162 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
       updateDemoItem<Match>(KEYS.matches, activeMatch.id, { homeScore, awayScore });
     }
     loadData();
+  };
+
+  // Timer para deshacer último evento
+  useEffect(() => {
+    if (undoTimer > 0) {
+      const timer = setInterval(() => {
+        setUndoTimer(prev => {
+          if (prev <= 1) {
+            setLastEventId(null);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [undoTimer]);
+
+  // Función para deshacer último evento
+  const undoLastEvent = () => {
+    if (!lastEventId || !activeMatch) return;
+    
+    const eventToDelete = events.find(e => e.id === lastEventId);
+    if (!eventToDelete) return;
+    
+    // Confirmación antes de deshacer
+    if (!confirm(`¿Deshacer este evento?\n${eventToDelete.playerName} - ${eventToDelete.type}`)) {
+      return;
+    }
+    
+    deleteEvent(lastEventId);
+    setLastEventId(null);
+    setUndoTimer(0);
+  };
+
+  // Función para guardar incidencia
+  const saveIncident = () => {
+    if (!activeMatch || !incidentDetails.trim()) {
+      alert('Por favor, describe la incidencia');
+      return;
+    }
+    
+    const incident = {
+      id: generateId(),
+      matchId: activeMatch.id,
+      type: incidentType,
+      details: incidentDetails,
+      timestamp: Date.now(),
+      refereeId: user.id
+    };
+    
+    // Guardar en localStorage
+    const incidents = JSON.parse(localStorage.getItem('torneospro_incidents') || '[]');
+    incidents.push(incident);
+    localStorage.setItem('torneospro_incidents', JSON.stringify(incidents));
+    
+    // Limpiar y cerrar modal
+    setIncidentDetails('');
+    setShowIncidentModal(false);
+    alert('✅ Incidencia registrada correctamente');
+  };
+
+  // Función para generar acta PDF
+  const generateActaPDF = () => {
+    if (!activeMatch) return;
+    
+    const doc = new jsPDF();
+    const homeTeam = teams.find(t => t.id === activeMatch.homeTeamId);
+    const awayTeam = teams.find(t => t.id === activeMatch.awayTeamId);
+    const matchEvents = events.filter(e => e.matchId === activeMatch.id);
+    
+    // Encabezado
+    doc.setFontSize(20);
+    doc.setTextColor(0, 51, 153);
+    doc.text('ACTA OFICIAL DEL PARTIDO', 105, 20, { align: 'center' });
+    
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Torneo: ${tournament?.name || 'N/A'}`, 20, 35);
+    doc.text(`Fecha: ${new Date().toLocaleDateString('es-ES')}`, 20, 42);
+    doc.text(`Jornada: ${activeMatch.jornada}`, 20, 49);
+    
+    // Equipos y marcador
+    doc.setFontSize(16);
+    doc.setTextColor(0, 51, 153);
+    doc.text('EQUIPOS', 105, 65, { align: 'center' });
+    
+    doc.setFontSize(14);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Local: ${homeTeam?.name || 'N/A'}`, 30, 75);
+    doc.text(`Visitante: ${awayTeam?.name || 'N/A'}`, 30, 85);
+    
+    doc.setFontSize(20);
+    doc.setTextColor(220, 50, 50);
+    doc.text(`${activeMatch.homeScore} - ${activeMatch.awayScore}`, 105, 100, { align: 'center' });
+    
+    // Eventos
+    doc.setFontSize(16);
+    doc.setTextColor(0, 51, 153);
+    doc.text('EVENTOS DEL PARTIDO', 105, 120, { align: 'center' });
+    
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    let yPos = 130;
+    
+    if (matchEvents.length === 0) {
+      doc.text('No se registraron eventos', 20, yPos);
+    } else {
+      matchEvents.forEach((event, index) => {
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        const eventIcon = event.type === 'gol' ? '⚽' : 
+                         event.type === 'yellow_card' ? '🟨' :
+                         event.type === 'red_card' ? '🟥' :
+                         event.type === 'touchdown' ? '🏈' :
+                         event.type === 'conversion_1' ? '1pt' :
+                         event.type === 'conversion_2' ? '2pts' : '💪';
+        
+        const time = new Date(event.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        doc.text(`${index + 1}. ${eventIcon} ${time} - ${event.playerName} (${event.teamName})`, 20, yPos);
+        yPos += 7;
+      });
+    }
+    
+    // MVPs (solo Tochito)
+    if (tournament?.sport === 'tochito' && (activeMatch.homeMvp || activeMatch.awayMvp)) {
+      yPos += 10;
+      doc.setFontSize(16);
+      doc.setTextColor(0, 51, 153);
+      doc.text('JUGADORES MVP', 105, yPos, { align: 'center' });
+      
+      doc.setFontSize(12);
+      doc.setTextColor(0, 0, 0);
+      yPos += 10;
+      
+      if (activeMatch.homeMvp) {
+        doc.text(`MVP ${homeTeam?.name}: ${activeMatch.homeMvp}`, 20, yPos);
+        yPos += 7;
+      }
+      if (activeMatch.awayMvp) {
+        doc.text(`MVP ${awayTeam?.name}: ${activeMatch.awayMvp}`, 20, yPos);
+        yPos += 7;
+      }
+    }
+    
+    // Pie de página
+    doc.setFontSize(9);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Árbitro: ${user.name}`, 20, 280);
+    doc.text(`Generado: ${new Date().toLocaleString('es-ES')}`, 20, 287);
+    
+    // Guardar PDF
+    doc.save(`Acta_Partido_${homeTeam?.name}_vs_${awayTeam?.name}_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   const finishMatch = () => {
@@ -1470,11 +1663,22 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
 
             {/* Event history */}
             <div className="card">
-              <h3 className="font-bold text-lg mb-3">Historial de Eventos</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-lg">Historial de Eventos</h3>
+                {lastEventId && undoTimer > 0 && (
+                  <button 
+                    onClick={undoLastEvent}
+                    className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded-lg text-sm font-medium transition-all animate-pulse"
+                  >
+                    <Undo size={16} />
+                    Deshacer ({undoTimer}s)
+                  </button>
+                )}
+              </div>
               {matchEvents.length === 0 ? <p className="text-gray-500">No hay eventos registrados</p> : (
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {matchEvents.map(e => (
-                    <div key={e.id} className="flex items-center justify-between bg-gray-700/50 rounded-lg px-3 py-2">
+                    <div key={e.id} className={`flex items-center justify-between bg-gray-700/50 rounded-lg px-3 py-2 ${e.id === lastEventId ? 'border-2 border-orange-500' : ''}`}>
                       <div className="flex items-center gap-2">
                         <span>{e.type === 'gol' ? '⚽' : e.type === 'yellow_card' ? '🟨' : e.type === 'red_card' ? '🟥' : e.type === 'touchdown' ? '🏈' : e.type === 'conversion_1' ? '1️⃣' : e.type === 'conversion_2' ? '2️⃣' : '💪'}</span>
                         <span className="text-sm font-medium">{e.playerName}</span>
@@ -1486,6 +1690,27 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* Herramientas adicionales */}
+            <div className="card">
+              <h3 className="font-bold text-lg mb-3">🛠️ Herramientas</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <button 
+                  onClick={() => setShowIncidentModal(true)}
+                  className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-3 rounded-lg font-medium transition-colors"
+                >
+                  <AlertCircle size={20} />
+                  Reportar Incidencia
+                </button>
+                <button 
+                  onClick={generateActaPDF}
+                  className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg font-medium transition-colors"
+                >
+                  <FileText size={20} />
+                  Generar Acta PDF
+                </button>
+              </div>
             </div>
 
             {/* Action buttons */}
@@ -1729,6 +1954,23 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
               💾 Guardar Cambios
             </button>
           </div>
+
+          {/* Botón de Acta PDF */}
+          <div className="border-t border-gray-700 pt-4">
+            <button 
+              onClick={() => {
+                generateActaPDF();
+                setShowEditModal(false);
+              }}
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium px-4 py-3 rounded-lg transition-all"
+            >
+              <FileText size={20} />
+              📄 Generar Acta Oficial del Partido
+            </button>
+            <p className="text-center text-xs text-gray-500 mt-2">
+              Descarga el acta oficial en formato PDF con todos los detalles del partido
+            </p>
+          </div>
         </div>
       </Modal>
 
@@ -1864,6 +2106,77 @@ function RefereePanel({ user, onLogout }: { user: User; onLogout: () => void }) 
           )}
         </div>
       </Modal>
+
+      {/* Modal de Incidencias */}
+      <Modal isOpen={showIncidentModal} onClose={() => setShowIncidentModal(false)} title="🚨 Reportar Incidencia">
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm text-gray-300 mb-2 block font-medium">Tipo de Incidencia</label>
+            <select 
+              value={incidentType} 
+              onChange={(e) => setIncidentType(e.target.value as any)}
+              className="input-field"
+            >
+              <option value="lesion">🏥 Lesión de Jugador</option>
+              <option value="conducta">⚠️ Conducta Antideportiva</option>
+              <option value="cancha">🏟️ Problemas con la Cancha</option>
+              <option value="otro">📝 Otro</option>
+            </select>
+          </div>
+          
+          <div>
+            <label className="text-sm text-gray-300 mb-2 block font-medium">Descripción Detallada</label>
+            <textarea
+              value={incidentDetails}
+              onChange={(e) => setIncidentDetails(e.target.value)}
+              placeholder="Describe la incidencia con el mayor detalle posible..."
+              className="input-field min-h-[120px] resize-none"
+              rows={5}
+            />
+          </div>
+
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 text-sm text-yellow-300">
+            <p className="font-medium mb-1">ℹ️ Información importante:</p>
+            <ul className="list-disc list-inside space-y-1 text-xs">
+              <li>La incidencia será registrada con fecha y hora</li>
+              <li>El administrador del torneo será notificado</li>
+              <li>Puedes incluir detalles de jugadores involucrados</li>
+            </ul>
+          </div>
+
+          <div className="flex gap-3">
+            <button 
+              onClick={() => setShowIncidentModal(false)}
+              className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+            >
+              Cancelar
+            </button>
+            <button 
+              onClick={saveIncident}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+            >
+              🚨 Registrar Incidencia
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Animaciones visuales */}
+      {showAnimation && (
+        <div className="fixed inset-0 pointer-events-none z-50 flex items-center justify-center">
+          {showAnimation === 'gol' && (
+            <div className="text-9xl animate-bounce">⚽</div>
+          )}
+          {showAnimation === 'touchdown' && (
+            <div className="text-9xl animate-bounce">🏈</div>
+          )}
+          {showAnimation === 'red_card' && (
+            <div className="w-full h-full bg-red-600/30 animate-pulse flex items-center justify-center">
+              <div className="text-9xl">🟥</div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Floating Action Button */}
       {hasActiveMatch && (
