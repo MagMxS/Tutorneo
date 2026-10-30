@@ -2212,6 +2212,13 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [showStats, setShowStats] = useState(false);
   const [showLiveDashboard, setShowLiveDashboard] = useState(false);
   const [eventFilter, setEventFilter] = useState<string>('all');
+  
+  // Estados para monetización
+  const [showRewardedVideo, setShowRewardedVideo] = useState(false);
+  const [videoCountdown, setVideoCountdown] = useState(5);
+  const [unlockedContent, setUnlockedContent] = useState<string[]>([]);
+  const [showPremiumModal, setShowPremiumModal] = useState(false);
+  
   const tournament = getDemoData<Tournament>(KEYS.tournaments).find(t => t.id === user.tournamentId);
   const myTeam = getDemoData<Team>(KEYS.teams).find(t => t.id === user.teamId);
 
@@ -2411,6 +2418,28 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
     XLSX.writeFile(wb, `${fileName}_${tournament?.name || 'Torneo'}_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
+  // Funciones de monetización
+  const handleRewardedVideo = (contentType: string) => {
+    setShowRewardedVideo(true);
+    setVideoCountdown(5);
+    
+    const timer = setInterval(() => {
+      setVideoCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          setShowRewardedVideo(false);
+          setUnlockedContent(prevUnlocked => [...prevUnlocked, contentType]);
+          return 5;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const isContentUnlocked = (contentType: string) => {
+    return unlockedContent.includes(contentType);
+  };
+
   return (
     <div className="min-h-screen bg-gray-900">
       <header className="bg-gray-800 border-b border-gray-700 px-4 py-3">
@@ -2432,7 +2461,7 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-4xl mx-auto px-4 py-6 pb-24 space-y-6">
         {/* Team card */}
         <div className="card text-center">
           {myTeam?.logo ? (
@@ -2446,10 +2475,18 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
 
         {/* Download Section */}
         <div className="card">
-          <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <Download className="text-blue-400" size={24} />
-            Descargar Estadísticas
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold flex items-center gap-2">
+              <Download className="text-blue-400" size={24} />
+              Descargar Estadísticas
+            </h3>
+            <button 
+              onClick={() => setShowPremiumModal(true)}
+              className="text-xs bg-gradient-to-r from-yellow-500 to-orange-500 text-gray-900 px-3 py-1 rounded-full font-bold hover:from-yellow-400 hover:to-orange-400 transition-all"
+            >
+              💎 Premium
+            </button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <button 
               onClick={exportMatchesToExcel}
@@ -2465,16 +2502,55 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
               <Download size={20} />
               Tabla de Posiciones
             </button>
-            <button 
-              onClick={exportScorersToExcel}
-              className="flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-4 py-3 rounded-lg font-medium transition-all shadow-lg hover:shadow-xl"
-            >
-              <Download size={20} />
-              {tournament?.sport === 'futbol' ? 'Goleadores' : 'Anotadores'}
-            </button>
+            <div className="relative">
+              {isContentUnlocked('scorers') ? (
+                <button 
+                  onClick={exportScorersToExcel}
+                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-4 py-3 rounded-lg font-medium transition-all shadow-lg hover:shadow-xl"
+                >
+                  <Download size={20} />
+                  {tournament?.sport === 'futbol' ? 'Goleadores' : 'Anotadores'}
+                </button>
+              ) : (
+                <button 
+                  onClick={() => handleRewardedVideo('scorers')}
+                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 text-white px-4 py-3 rounded-lg font-medium transition-all shadow-lg hover:shadow-xl border-2 border-dashed border-yellow-500/50"
+                >
+                  <span className="text-xl">🎥</span>
+                  <div className="text-left">
+                    <div className="text-sm font-bold">{tournament?.sport === 'futbol' ? 'Goleadores' : 'Anotadores'}</div>
+                    <div className="text-xs text-yellow-400">Ver video para desbloquear</div>
+                  </div>
+                </button>
+              )}
+              {!isContentUnlocked('scorers') && (
+                <div className="absolute -top-2 -right-2 bg-yellow-500 text-gray-900 text-xs px-2 py-0.5 rounded-full font-bold">
+                  🔒
+                </div>
+              )}
+            </div>
           </div>
           <p className="text-xs text-gray-500 mt-3 text-center">
             📊 Los archivos se descargan en formato Excel (.xlsx)
+          </p>
+        </div>
+
+        {/* Banner Ad - Google AdSense */}
+        <div className="card bg-gradient-to-r from-gray-800 to-gray-900 border-2 border-dashed border-gray-600">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-gray-500 uppercase tracking-wider">Publicidad</span>
+            <span className="text-xs text-gray-600">320x50</span>
+          </div>
+          <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg p-6 text-center">
+            <div className="text-3xl mb-2">👟</div>
+            <h4 className="text-white font-bold text-lg mb-1">Nike Mercurial 2024</h4>
+            <p className="text-blue-100 text-sm mb-3">Los botines de los campeones</p>
+            <button className="bg-white text-blue-600 px-6 py-2 rounded-full font-bold hover:bg-blue-50 transition-colors">
+              Comprar Ahora →
+            </button>
+          </div>
+          <p className="text-xs text-gray-600 mt-2 text-center">
+            Anuncio patrocinado • Google AdSense
           </p>
         </div>
 
@@ -2486,12 +2562,22 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
                 <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
                 <h3 className="text-xl font-bold text-green-400">📺 Partido en Vivo</h3>
               </div>
-              <button 
-                onClick={() => setShowLiveDashboard(!showLiveDashboard)}
-                className="btn-secondary text-sm px-4 py-2"
-              >
-                {showLiveDashboard ? 'Ocultar Dashboard' : 'Ver Dashboard Completo'}
-              </button>
+              {isContentUnlocked('dashboard') ? (
+                <button 
+                  onClick={() => setShowLiveDashboard(!showLiveDashboard)}
+                  className="btn-secondary text-sm px-4 py-2"
+                >
+                  {showLiveDashboard ? 'Ocultar Dashboard' : 'Ver Dashboard Completo'}
+                </button>
+              ) : (
+                <button 
+                  onClick={() => handleRewardedVideo('dashboard')}
+                  className="flex items-center gap-2 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-gray-900 text-sm px-4 py-2 rounded-lg font-bold transition-all"
+                >
+                  <span>🎥</span>
+                  <span>Desbloquear Dashboard</span>
+                </button>
+              )}
             </div>
 
             {/* Compact view - always visible */}
@@ -2770,6 +2856,93 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
           </div>
         )}
 
+        {/* Local Business Ads */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold flex items-center gap-2">
+              <span className="text-2xl">📍</span>
+              Negocios Cerca de Ti
+            </h3>
+            <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full">Patrocinado</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Negocio 1 */}
+            <div className="bg-gradient-to-br from-orange-500/10 to-red-500/10 border border-orange-500/30 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="text-4xl">🏥</div>
+                <div className="flex-1">
+                  <h4 className="font-bold text-white">Clínica Deportiva García</h4>
+                  <p className="text-sm text-gray-400 mt-1">Fisioterapia y prevención de lesiones</p>
+                  <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+                    <span>📍 2 km</span>
+                    <span>⭐ 4.8</span>
+                  </div>
+                  <button className="mt-3 w-full bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                    Agendar Cita →
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Negocio 2 */}
+            <div className="bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="text-4xl">🍕</div>
+                <div className="flex-1">
+                  <h4 className="font-bold text-white">Pizza Sport</h4>
+                  <p className="text-sm text-gray-400 mt-1">20% descuento mostrando esta app</p>
+                  <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+                    <span>📍 500 m</span>
+                    <span>⭐ 4.6</span>
+                  </div>
+                  <button className="mt-3 w-full bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                    Ver Menú →
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Negocio 3 */}
+            <div className="bg-gradient-to-br from-green-500/10 to-teal-500/10 border border-green-500/30 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="text-4xl">🏋️</div>
+                <div className="flex-1">
+                  <h4 className="font-bold text-white">Gym PowerFit</h4>
+                  <p className="text-sm text-gray-400 mt-1">Primera semana gratis para jugadores</p>
+                  <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+                    <span>📍 1.5 km</span>
+                    <span>⭐ 4.9</span>
+                  </div>
+                  <button className="mt-3 w-full bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                    Inscribirse →
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Negocio 4 */}
+            <div className="bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/30 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="text-4xl">⚽</div>
+                <div className="flex-1">
+                  <h4 className="font-bold text-white">SportShop Pro</h4>
+                  <p className="text-sm text-gray-400 mt-1">Equipamiento deportivo profesional</p>
+                  <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+                    <span>📍 3 km</span>
+                    <span>⭐ 4.7</span>
+                  </div>
+                  <button className="mt-3 w-full bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                    Ver Productos →
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-4 text-center">
+            💼 ¿Tienes un negocio? <button className="text-blue-400 hover:underline">Anúnciate aquí</button>
+          </p>
+        </div>
+
         {/* Standings */}
         <div>
           <h3 className="text-xl font-bold mb-3">Tabla de Posiciones</h3>
@@ -2852,6 +3025,108 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
               </div>
             ))
           )}
+        </div>
+      </Modal>
+
+      {/* Sticky Bottom Banner Ad */}
+      <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-gray-900 to-gray-800 border-t-2 border-yellow-500/50 p-2 z-40 shadow-2xl">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 flex-1">
+            <div className="text-3xl">🏆</div>
+            <div className="flex-1">
+              <p className="text-white font-bold text-sm">TorneosPro Premium</p>
+              <p className="text-gray-400 text-xs">Sin anuncios + funciones exclusivas</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => setShowPremiumModal(true)}
+            className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-gray-900 px-4 py-2 rounded-lg font-bold text-sm whitespace-nowrap transition-all"
+          >
+            $2.99/mes →
+          </button>
+        </div>
+      </div>
+
+      {/* Rewarded Video Modal */}
+      <Modal isOpen={showRewardedVideo} onClose={() => {}} title="🎥 Video Publicitario">
+        <div className="text-center space-y-6">
+          <div className="bg-gradient-to-br from-purple-600 to-blue-600 rounded-xl p-8">
+            <div className="text-6xl mb-4 animate-bounce">📺</div>
+            <h3 className="text-2xl font-bold text-white mb-2">Video en Reproducción</h3>
+            <p className="text-purple-100">Espera para desbloquear el contenido</p>
+          </div>
+          
+          <div className="bg-gray-700 rounded-lg p-4">
+            <div className="text-5xl font-bold text-yellow-400 mb-2">{videoCountdown}</div>
+            <p className="text-gray-400 text-sm">segundos restantes</p>
+            <div className="w-full bg-gray-600 rounded-full h-2 mt-3">
+              <div 
+                className="bg-gradient-to-r from-yellow-400 to-orange-500 h-2 rounded-full transition-all duration-1000"
+                style={{ width: `${((5 - videoCountdown) / 5) * 100}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+            <p className="text-blue-300 text-sm">
+              💡 Después del video, podrás acceder al contenido premium de forma gratuita
+            </p>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Premium Modal */}
+      <Modal isOpen={showPremiumModal} onClose={() => setShowPremiumModal(false)} title="💎 TorneosPro Premium">
+        <div className="space-y-4">
+          <div className="bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border-2 border-yellow-500/50 rounded-xl p-6 text-center">
+            <div className="text-5xl mb-3">💎</div>
+            <h3 className="text-2xl font-bold text-yellow-400 mb-2">Hazte Premium</h3>
+            <p className="text-gray-300">Elimina anuncios y desbloquea todas las funciones</p>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-start gap-3">
+              <Check className="text-green-400 flex-shrink-0 mt-1" size={20} />
+              <div>
+                <p className="font-medium text-white">Sin Anuncios</p>
+                <p className="text-sm text-gray-400">Experiencia limpia y sin interrupciones</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <Check className="text-green-400 flex-shrink-0 mt-1" size={20} />
+              <div>
+                <p className="font-medium text-white">Estadísticas Avanzadas</p>
+                <p className="text-sm text-gray-400">Análisis completo de rendimiento</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <Check className="text-green-400 flex-shrink-0 mt-1" size={20} />
+              <div>
+                <p className="font-medium text-white">Descargas Ilimitadas</p>
+                <p className="text-sm text-gray-400">Exporta todos los datos en Excel</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <Check className="text-green-400 flex-shrink-0 mt-1" size={20} />
+              <div>
+                <p className="font-medium text-white">Dashboard Completo</p>
+                <p className="text-sm text-gray-400">Acceso total al dashboard en vivo</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-gray-700 rounded-lg p-4 text-center">
+            <p className="text-3xl font-bold text-yellow-400">$2.99<span className="text-lg text-gray-400">/mes</span></p>
+            <p className="text-sm text-gray-400 mt-1">o $29.99/año (ahorra 16%)</p>
+          </div>
+
+          <button className="btn-primary w-full text-lg py-3">
+            🚀 Suscribirse Ahora
+          </button>
+
+          <p className="text-center text-xs text-gray-500">
+            También puedes ver videos publicitarios para desbloquear contenido temporalmente
+          </p>
         </div>
       </Modal>
     </div>
