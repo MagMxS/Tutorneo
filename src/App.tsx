@@ -2768,20 +2768,70 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <button 
-              onClick={exportMatchesToExcel}
-              className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-4 py-3 rounded-lg font-medium transition-all shadow-lg hover:shadow-xl"
-            >
-              <Download size={20} />
-              Mis Partidos
-            </button>
-            <button 
-              onClick={exportStandingsToExcel}
-              className="flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-3 rounded-lg font-medium transition-all shadow-lg hover:shadow-xl"
-            >
-              <Download size={20} />
-              Tabla de Posiciones
-            </button>
+            <div className="relative">
+              {isContentUnlocked('matches') ? (
+                <div>
+                  <button 
+                    onClick={exportMatchesToExcel}
+                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-4 py-3 rounded-lg font-medium transition-all shadow-lg hover:shadow-xl"
+                  >
+                    <Download size={20} />
+                    Mis Partidos
+                  </button>
+                  <div className="text-xs text-green-400 text-center mt-1">
+                    ✓ Desbloqueado • {getUnlockTimeRemaining('matches')}
+                  </div>
+                </div>
+              ) : (
+                <button 
+                  onClick={() => handleRewardedVideo('matches')}
+                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 text-white px-4 py-3 rounded-lg font-medium transition-all shadow-lg hover:shadow-xl border-2 border-dashed border-yellow-500/50"
+                >
+                  <span className="text-xl">🎥</span>
+                  <div className="text-left">
+                    <div className="text-sm font-bold">Mis Partidos</div>
+                    <div className="text-xs text-yellow-400">Ver video para desbloquear (24h)</div>
+                  </div>
+                </button>
+              )}
+              {!isContentUnlocked('matches') && (
+                <div className="absolute -top-2 -right-2 bg-yellow-500 text-gray-900 text-xs px-2 py-0.5 rounded-full font-bold">
+                  🔒
+                </div>
+              )}
+            </div>
+            <div className="relative">
+              {isContentUnlocked('standings') ? (
+                <div>
+                  <button 
+                    onClick={exportStandingsToExcel}
+                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-3 rounded-lg font-medium transition-all shadow-lg hover:shadow-xl"
+                  >
+                    <Download size={20} />
+                    Tabla de Posiciones
+                  </button>
+                  <div className="text-xs text-green-400 text-center mt-1">
+                    ✓ Desbloqueado • {getUnlockTimeRemaining('standings')}
+                  </div>
+                </div>
+              ) : (
+                <button 
+                  onClick={() => handleRewardedVideo('standings')}
+                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 text-white px-4 py-3 rounded-lg font-medium transition-all shadow-lg hover:shadow-xl border-2 border-dashed border-yellow-500/50"
+                >
+                  <span className="text-xl">🎥</span>
+                  <div className="text-left">
+                    <div className="text-sm font-bold">Tabla de Posiciones</div>
+                    <div className="text-xs text-yellow-400">Ver video para desbloquear (24h)</div>
+                  </div>
+                </button>
+              )}
+              {!isContentUnlocked('standings') && (
+                <div className="absolute -top-2 -right-2 bg-yellow-500 text-gray-900 text-xs px-2 py-0.5 rounded-full font-bold">
+                  🔒
+                </div>
+              )}
+            </div>
             <div className="relative">
               {isContentUnlocked('scorers') ? (
                 <div>
