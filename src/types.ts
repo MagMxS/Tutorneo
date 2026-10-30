@@ -93,6 +93,7 @@ export interface LocalBusiness {
   distance: string;
   rating: number;
   websiteUrl: string;
+  phone: string;
   gradientFrom: string;
   gradientTo: string;
   buttonText: string;
