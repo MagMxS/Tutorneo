@@ -85,6 +85,20 @@ export interface AppConfig {
   phone: string;
 }
 
+export interface LocalBusiness {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  distance: string;
+  rating: number;
+  websiteUrl: string;
+  gradientFrom: string;
+  gradientTo: string;
+  buttonText: string;
+  active: boolean;
+}
+
 export interface StandingRow {
   teamId: string;
   teamName: string;

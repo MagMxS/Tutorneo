@@ -10,7 +10,7 @@ import confetti from 'canvas-confetti';
 import * as XLSX from 'xlsx';
 import {
   User, Tournament, Team, Field, Match, MatchEvent, Notification,
-  AppConfig, SportType, MatchStatus, StandingRow, ScorerRow
+  AppConfig, SportType, MatchStatus, StandingRow, ScorerRow, LocalBusiness
 } from './types';
 import {
   getDemoData, setDemoData, addDemoItem, removeDemoItem, updateDemoItem,
@@ -140,23 +140,27 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
 
 // ==================== SUPER ADMIN PANEL ====================
 function SuperAdminPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
-  const [tab, setTab] = useState<'tournaments' | 'users' | 'config'>('tournaments');
+  const [tab, setTab] = useState<'tournaments' | 'users' | 'config' | 'businesses'>('tournaments');
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [businesses, setBusinesses] = useState<LocalBusiness[]>([]);
   const [config, setConfigState] = useState<AppConfig>(getConfig());
   const [showTournamentModal, setShowTournamentModal] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
+  const [showBusinessModal, setShowBusinessModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editingBusiness, setEditingBusiness] = useState<LocalBusiness | null>(null);
   const [showPassMap, setShowPassMap] = useState<Record<string, boolean>>({});
   const [resetUsername, setResetUsername] = useState('');
   const [resetPassword, setResetPassword] = useState('');
-  const [confirmDelete, setConfirmDelete] = useState<{ type: 'tournament' | 'user'; id: string; name: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ type: 'tournament' | 'user' | 'business'; id: string; name: string } | null>(null);
 
   const loadData = useCallback(() => {
     setTournaments(getDemoData<Tournament>(KEYS.tournaments));
     setUsers(getDemoData<User>(KEYS.users));
+    setBusinesses(getDemoData<LocalBusiness>('torneospro_businesses'));
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -225,6 +229,75 @@ function SuperAdminPanel({ user, onLogout }: { user: User; onLogout: () => void 
     loadData();
   };
 
+  // Business CRUD
+  const [bForm, setBForm] = useState<Omit<LocalBusiness, 'id'>>({
+    name: '',
+    description: '',
+    icon: '🏪',
+    distance: '',
+    rating: 4.5,
+    websiteUrl: '',
+    gradientFrom: 'blue-500',
+    gradientTo: 'purple-500',
+    buttonText: 'Visitar',
+    active: true
+  });
+
+  const openBusinessModal = (b?: LocalBusiness) => {
+    if (b) {
+      setEditingBusiness(b);
+      setBForm({
+        name: b.name,
+        description: b.description,
+        icon: b.icon,
+        distance: b.distance,
+        rating: b.rating,
+        websiteUrl: b.websiteUrl,
+        gradientFrom: b.gradientFrom,
+        gradientTo: b.gradientTo,
+        buttonText: b.buttonText,
+        active: b.active
+      });
+    } else {
+      setEditingBusiness(null);
+      setBForm({
+        name: '',
+        description: '',
+        icon: '🏪',
+        distance: '',
+        rating: 4.5,
+        websiteUrl: '',
+        gradientFrom: 'blue-500',
+        gradientTo: 'purple-500',
+        buttonText: 'Visitar',
+        active: true
+      });
+    }
+    setShowBusinessModal(true);
+  };
+
+  const saveBusiness = () => {
+    if (!bForm.name.trim() || !bForm.description.trim()) return;
+    if (editingBusiness) {
+      updateDemoItem<LocalBusiness>('torneospro_businesses', editingBusiness.id, bForm);
+    } else {
+      addDemoItem<LocalBusiness>('torneospro_businesses', { id: generateId(), ...bForm });
+    }
+    setShowBusinessModal(false);
+    loadData();
+  };
+
+  const deleteBusiness = (id: string, name: string) => {
+    setConfirmDelete({ type: 'business', id, name });
+  };
+
+  const confirmDeleteBusiness = () => {
+    if (!confirmDelete || confirmDelete.type !== 'business') return;
+    removeDemoItem<LocalBusiness>('torneospro_businesses', confirmDelete.id);
+    setConfirmDelete(null);
+    loadData();
+  };
+
   const handleReset = () => {
     if (resetUsername === 'superadmin' && resetPassword === 'admin123') {
       resetAllData();
@@ -256,7 +329,12 @@ function SuperAdminPanel({ user, onLogout }: { user: User; onLogout: () => void 
       {/* Tabs */}
       <div className="max-w-7xl mx-auto px-4 py-4">
         <div className="flex gap-2 mb-6 overflow-x-auto">
-          {[{ k: 'tournaments', label: 'Torneos', icon: <Trophy size={18} /> }, { k: 'users', label: 'Usuarios', icon: <Users size={18} /> }, { k: 'config', label: 'Configuración', icon: <Settings size={18} /> }].map(t => (
+          {[
+            { k: 'tournaments', label: 'Torneos', icon: <Trophy size={18} /> },
+            { k: 'users', label: 'Usuarios', icon: <Users size={18} /> },
+            { k: 'businesses', label: 'Negocios', icon: <MapPin size={18} /> },
+            { k: 'config', label: 'Configuración', icon: <Settings size={18} /> }
+          ].map(t => (
             <button key={t.k} onClick={() => setTab(t.k as any)} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-all ${tab === t.k ? 'bg-yellow-500 text-gray-900' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>
               {t.icon}{t.label}
             </button>
@@ -337,6 +415,56 @@ function SuperAdminPanel({ user, onLogout }: { user: User; onLogout: () => void 
           </div>
         )}
 
+        {/* Businesses Tab */}
+        {tab === 'businesses' && (
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Negocios Locales</h2>
+              <button className="btn-primary flex items-center gap-2" onClick={() => openBusinessModal()}>
+                <Plus size={18} />Nuevo Negocio
+              </button>
+            </div>
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mb-4">
+              <p className="text-blue-300 text-sm">
+                💡 Los negocios que agregues aquí aparecerán en la sección "Negocios Cerca de Ti" del panel de jugadores.
+              </p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {businesses.map(b => (
+                <div key={b.id} className={`card p-4 ${!b.active ? 'opacity-50' : ''}`}>
+                  <div className="flex items-start gap-3">
+                    <div className="text-4xl">{b.icon}</div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-lg truncate">{b.name}</h3>
+                      <p className="text-sm text-gray-400 truncate">{b.description}</p>
+                      <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+                        <span>📍 {b.distance}</span>
+                        <span>⭐ {b.rating}</span>
+                      </div>
+                      {!b.active && (
+                        <span className="inline-block mt-2 text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded">
+                          Inactivo
+                        </span>
+                      )}
+                      <div className="flex gap-2 mt-3">
+                        <button onClick={() => openBusinessModal(b)} className="text-blue-400 hover:text-blue-300">
+                          <Edit size={16} />
+                        </button>
+                        <button onClick={() => deleteBusiness(b.id, b.name)} className="text-red-400 hover:text-red-300">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {businesses.length === 0 && (
+              <p className="text-gray-500 text-center py-8">No hay negocios agregados</p>
+            )}
+          </div>
+        )}
+
         {/* Config Tab */}
         {tab === 'config' && (
           <div className="card max-w-lg">
@@ -399,6 +527,79 @@ function SuperAdminPanel({ user, onLogout }: { user: User; onLogout: () => void 
         </div>
       </Modal>
 
+      {/* Business Modal */}
+      <Modal isOpen={showBusinessModal} onClose={() => setShowBusinessModal(false)} title={editingBusiness ? 'Editar Negocio' : 'Nuevo Negocio'}>
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm text-gray-300 mb-1 block">Nombre del Negocio *</label>
+            <input className="input-field" value={bForm.name} onChange={e => setBForm({ ...bForm, name: e.target.value })} placeholder="Ej: Pizza Roma" />
+          </div>
+          <div>
+            <label className="text-sm text-gray-300 mb-1 block">Descripción *</label>
+            <textarea className="input-field" value={bForm.description} onChange={e => setBForm({ ...bForm, description: e.target.value })} placeholder="Ej: Auténtica pizza italiana" rows={2} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm text-gray-300 mb-1 block">Icono (Emoji)</label>
+              <input className="input-field" value={bForm.icon} onChange={e => setBForm({ ...bForm, icon: e.target.value })} placeholder="🏪" />
+            </div>
+            <div>
+              <label className="text-sm text-gray-300 mb-1 block">Distancia</label>
+              <input className="input-field" value={bForm.distance} onChange={e => setBForm({ ...bForm, distance: e.target.value })} placeholder="Ej: 2 km" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm text-gray-300 mb-1 block">Calificación (1-5)</label>
+              <input type="number" min="1" max="5" step="0.1" className="input-field" value={bForm.rating} onChange={e => setBForm({ ...bForm, rating: parseFloat(e.target.value) || 4.5 })} />
+            </div>
+            <div>
+              <label className="text-sm text-gray-300 mb-1 block">Texto del Botón</label>
+              <input className="input-field" value={bForm.buttonText} onChange={e => setBForm({ ...bForm, buttonText: e.target.value })} placeholder="Ej: Visitar" />
+            </div>
+          </div>
+          <div>
+            <label className="text-sm text-gray-300 mb-1 block">URL del Sitio Web</label>
+            <input className="input-field" value={bForm.websiteUrl} onChange={e => setBForm({ ...bForm, websiteUrl: e.target.value })} placeholder="https://www.ejemplo.com" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm text-gray-300 mb-1 block">Color Inicial</label>
+              <select className="input-field" value={bForm.gradientFrom} onChange={e => setBForm({ ...bForm, gradientFrom: e.target.value })}>
+                <option value="blue-500">Azul</option>
+                <option value="green-500">Verde</option>
+                <option value="orange-500">Naranja</option>
+                <option value="red-500">Rojo</option>
+                <option value="purple-500">Púrpura</option>
+                <option value="yellow-500">Amarillo</option>
+                <option value="pink-500">Rosa</option>
+                <option value="indigo-500">Índigo</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm text-gray-300 mb-1 block">Color Final</label>
+              <select className="input-field" value={bForm.gradientTo} onChange={e => setBForm({ ...bForm, gradientTo: e.target.value })}>
+                <option value="blue-500">Azul</option>
+                <option value="green-500">Verde</option>
+                <option value="orange-500">Naranja</option>
+                <option value="red-500">Rojo</option>
+                <option value="purple-500">Púrpura</option>
+                <option value="yellow-500">Amarillo</option>
+                <option value="pink-500">Rosa</option>
+                <option value="indigo-500">Índigo</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <input type="checkbox" id="active" checked={bForm.active} onChange={e => setBForm({ ...bForm, active: e.target.checked })} className="w-4 h-4" />
+            <label htmlFor="active" className="text-sm text-gray-300">Negocio Activo (visible para jugadores)</label>
+          </div>
+          <button className="btn-primary w-full" onClick={saveBusiness}>
+            {editingBusiness ? 'Guardar Cambios' : 'Crear Negocio'}
+          </button>
+        </div>
+      </Modal>
+
       {/* Reset Modal */}
       <Modal isOpen={showResetModal} onClose={() => setShowResetModal(false)} title="Resetear Sistema">
         <div className="space-y-4">
@@ -421,11 +622,23 @@ function SuperAdminPanel({ user, onLogout }: { user: User; onLogout: () => void 
       <ConfirmModal
         isOpen={confirmDelete !== null}
         onClose={() => setConfirmDelete(null)}
-        onConfirm={confirmDelete?.type === 'tournament' ? confirmDeleteTournament : confirmDeleteUser}
-        title={confirmDelete?.type === 'tournament' ? 'Eliminar Torneo' : 'Eliminar Usuario'}
-        message={confirmDelete?.type === 'tournament'
-          ? `¿Eliminar el torneo "${confirmDelete?.name}" y todos sus datos asociados?`
-          : `¿Eliminar al usuario "${confirmDelete?.name}"?`}
+        onConfirm={
+          confirmDelete?.type === 'tournament' ? confirmDeleteTournament :
+          confirmDelete?.type === 'business' ? confirmDeleteBusiness :
+          confirmDeleteUser
+        }
+        title={
+          confirmDelete?.type === 'tournament' ? 'Eliminar Torneo' :
+          confirmDelete?.type === 'business' ? 'Eliminar Negocio' :
+          'Eliminar Usuario'
+        }
+        message={
+          confirmDelete?.type === 'tournament'
+            ? `¿Eliminar el torneo "${confirmDelete?.name}" y todos sus datos asociados?`
+            : confirmDelete?.type === 'business'
+            ? `¿Eliminar el negocio "${confirmDelete?.name}"?`
+            : `¿Eliminar al usuario "${confirmDelete?.name}"?`
+        }
       />
     </div>
   );
@@ -2208,6 +2421,7 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [events, setEvents] = useState<MatchEvent[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [businesses, setBusinesses] = useState<LocalBusiness[]>([]);
   const [showNotifPanel, setShowNotifPanel] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showLiveDashboard, setShowLiveDashboard] = useState(false);
@@ -2228,6 +2442,7 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
     setEvents(getDemoData<MatchEvent>(KEYS.events));
     setTeams(getDemoData<Team>(KEYS.teams).filter(t => t.tournamentId === user.tournamentId));
     setNotifications(getDemoData<Notification>(KEYS.notifications).filter(n => n.tournamentId === user.tournamentId));
+    setBusinesses(getDemoData<LocalBusiness>('torneospro_businesses').filter(b => b.active));
   }, [user.tournamentId]);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -2916,91 +3131,51 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
         )}
 
         {/* Local Business Ads */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold flex items-center gap-2">
-              <span className="text-2xl">📍</span>
-              Negocios Cerca de Ti
-            </h3>
-            <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full">Patrocinado</span>
+        {businesses.length > 0 && (
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <span className="text-2xl">📍</span>
+                Negocios Cerca de Ti
+              </h3>
+              <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full">Patrocinado</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {businesses.map(business => (
+                <div key={business.id} className={`bg-gradient-to-br from-${business.gradientFrom}/10 to-${business.gradientTo}/10 border border-${business.gradientFrom}/30 rounded-lg p-4`}>
+                  <div className="flex items-start gap-3">
+                    <div className="text-4xl">{business.icon}</div>
+                    <div className="flex-1">
+                      <h4 className="font-bold text-white">{business.name}</h4>
+                      <p className="text-sm text-gray-400 mt-1">{business.description}</p>
+                      <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+                        <span>📍 {business.distance}</span>
+                        <span>⭐ {business.rating}</span>
+                      </div>
+                      {business.websiteUrl ? (
+                        <a 
+                          href={business.websiteUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`mt-3 w-full bg-${business.gradientFrom} hover:bg-${business.gradientFrom}/80 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors block text-center`}
+                        >
+                          {business.buttonText} →
+                        </a>
+                      ) : (
+                        <button className={`mt-3 w-full bg-${business.gradientFrom} text-white px-4 py-2 rounded-lg text-sm font-medium cursor-default`}>
+                          {business.buttonText}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-4 text-center">
+              💼 ¿Tienes un negocio? <a href="mailto:anuncios@torneospro.com" className="text-blue-400 hover:underline">Anúnciate aquí</a>
+            </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Negocio 1 */}
-            <div className="bg-gradient-to-br from-orange-500/10 to-red-500/10 border border-orange-500/30 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <div className="text-4xl">🏥</div>
-                <div className="flex-1">
-                  <h4 className="font-bold text-white">Clínica Deportiva García</h4>
-                  <p className="text-sm text-gray-400 mt-1">Fisioterapia y prevención de lesiones</p>
-                  <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
-                    <span>📍 2 km</span>
-                    <span>⭐ 4.8</span>
-                  </div>
-                  <button className="mt-3 w-full bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                    Agendar Cita →
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Negocio 2 */}
-            <div className="bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <div className="text-4xl">🍕</div>
-                <div className="flex-1">
-                  <h4 className="font-bold text-white">Pizza Sport</h4>
-                  <p className="text-sm text-gray-400 mt-1">20% descuento mostrando esta app</p>
-                  <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
-                    <span>📍 500 m</span>
-                    <span>⭐ 4.6</span>
-                  </div>
-                  <button className="mt-3 w-full bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                    Ver Menú →
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Negocio 3 */}
-            <div className="bg-gradient-to-br from-green-500/10 to-teal-500/10 border border-green-500/30 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <div className="text-4xl">🏋️</div>
-                <div className="flex-1">
-                  <h4 className="font-bold text-white">Gym PowerFit</h4>
-                  <p className="text-sm text-gray-400 mt-1">Primera semana gratis para jugadores</p>
-                  <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
-                    <span>📍 1.5 km</span>
-                    <span>⭐ 4.9</span>
-                  </div>
-                  <button className="mt-3 w-full bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                    Inscribirse →
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Negocio 4 */}
-            <div className="bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/30 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <div className="text-4xl">⚽</div>
-                <div className="flex-1">
-                  <h4 className="font-bold text-white">SportShop Pro</h4>
-                  <p className="text-sm text-gray-400 mt-1">Equipamiento deportivo profesional</p>
-                  <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
-                    <span>📍 3 km</span>
-                    <span>⭐ 4.7</span>
-                  </div>
-                  <button className="mt-3 w-full bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                    Ver Productos →
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <p className="text-xs text-gray-500 mt-4 text-center">
-            💼 ¿Tienes un negocio? <button className="text-blue-400 hover:underline">Anúnciate aquí</button>
-          </p>
-        </div>
+        )}
 
         {/* Standings */}
         <div>
