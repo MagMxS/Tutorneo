@@ -2216,7 +2216,7 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
   // Estados para monetización
   const [showRewardedVideo, setShowRewardedVideo] = useState(false);
   const [videoCountdown, setVideoCountdown] = useState(5);
-  const [unlockedContent, setUnlockedContent] = useState<string[]>([]);
+  const [unlockedContent, setUnlockedContent] = useState<Record<string, number>>({});
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   
   const tournament = getDemoData<Tournament>(KEYS.tournaments).find(t => t.id === user.tournamentId);
@@ -2428,7 +2428,17 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
         if (prev <= 1) {
           clearInterval(timer);
           setShowRewardedVideo(false);
-          setUnlockedContent(prevUnlocked => [...prevUnlocked, contentType]);
+          // Guardar timestamp de desbloqueo
+          const unlockTime = Date.now();
+          setUnlockedContent(prevUnlocked => ({
+            ...prevUnlocked,
+            [contentType]: unlockTime
+          }));
+          // Guardar en localStorage para persistencia
+          localStorage.setItem('torneospro_unlocked_content', JSON.stringify({
+            ...unlockedContent,
+            [contentType]: unlockTime
+          }));
           return 5;
         }
         return prev - 1;
@@ -2437,7 +2447,46 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
   };
 
   const isContentUnlocked = (contentType: string) => {
-    return unlockedContent.includes(contentType);
+    const unlockTime = unlockedContent[contentType];
+    if (!unlockTime) return false;
+    
+    // Verificar si han pasado menos de 24 horas
+    const hoursPassed = (Date.now() - unlockTime) / (1000 * 60 * 60);
+    return hoursPassed < 24;
+  };
+
+  // Cargar contenido desbloqueado desde localStorage al iniciar
+  useEffect(() => {
+    const saved = localStorage.getItem('torneospro_unlocked_content');
+    if (saved) {
+      const unlocked = JSON.parse(saved);
+      // Filtrar contenido expirado (más de 24 horas)
+      const validUnlocked: Record<string, number> = {};
+      Object.entries(unlocked).forEach(([key, time]) => {
+        const hoursPassed = (Date.now() - (time as number)) / (1000 * 60 * 60);
+        if (hoursPassed < 24) {
+          validUnlocked[key] = time as number;
+        }
+      });
+      setUnlockedContent(validUnlocked);
+      localStorage.setItem('torneospro_unlocked_content', JSON.stringify(validUnlocked));
+    }
+  }, []);
+
+  // Función para obtener tiempo restante de desbloqueo
+  const getUnlockTimeRemaining = (contentType: string): string => {
+    const unlockTime = unlockedContent[contentType];
+    if (!unlockTime) return '';
+    
+    const hoursPassed = (Date.now() - unlockTime) / (1000 * 60 * 60);
+    const hoursRemaining = 24 - hoursPassed;
+    
+    if (hoursRemaining <= 0) return 'Expirado';
+    
+    const hours = Math.floor(hoursRemaining);
+    const minutes = Math.floor((hoursRemaining - hours) * 60);
+    
+    return `${hours}h ${minutes}m restantes`;
   };
 
   return (
@@ -2504,13 +2553,18 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
             </button>
             <div className="relative">
               {isContentUnlocked('scorers') ? (
-                <button 
-                  onClick={exportScorersToExcel}
-                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-4 py-3 rounded-lg font-medium transition-all shadow-lg hover:shadow-xl"
-                >
-                  <Download size={20} />
-                  {tournament?.sport === 'futbol' ? 'Goleadores' : 'Anotadores'}
-                </button>
+                <div>
+                  <button 
+                    onClick={exportScorersToExcel}
+                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white px-4 py-3 rounded-lg font-medium transition-all shadow-lg hover:shadow-xl"
+                  >
+                    <Download size={20} />
+                    {tournament?.sport === 'futbol' ? 'Goleadores' : 'Anotadores'}
+                  </button>
+                  <div className="text-xs text-green-400 text-center mt-1">
+                    ✓ Desbloqueado • {getUnlockTimeRemaining('scorers')}
+                  </div>
+                </div>
               ) : (
                 <button 
                   onClick={() => handleRewardedVideo('scorers')}
@@ -2519,7 +2573,7 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
                   <span className="text-xl">🎥</span>
                   <div className="text-left">
                     <div className="text-sm font-bold">{tournament?.sport === 'futbol' ? 'Goleadores' : 'Anotadores'}</div>
-                    <div className="text-xs text-yellow-400">Ver video para desbloquear</div>
+                    <div className="text-xs text-yellow-400">Ver video para desbloquear (24h)</div>
                   </div>
                 </button>
               )}
@@ -2563,19 +2617,24 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
                 <h3 className="text-xl font-bold text-green-400">📺 Partido en Vivo</h3>
               </div>
               {isContentUnlocked('dashboard') ? (
-                <button 
-                  onClick={() => setShowLiveDashboard(!showLiveDashboard)}
-                  className="btn-secondary text-sm px-4 py-2"
-                >
-                  {showLiveDashboard ? 'Ocultar Dashboard' : 'Ver Dashboard Completo'}
-                </button>
+                <div className="flex flex-col items-end gap-1">
+                  <button 
+                    onClick={() => setShowLiveDashboard(!showLiveDashboard)}
+                    className="btn-secondary text-sm px-4 py-2"
+                  >
+                    {showLiveDashboard ? 'Ocultar Dashboard' : 'Ver Dashboard Completo'}
+                  </button>
+                  <span className="text-xs text-green-400">
+                    ✓ {getUnlockTimeRemaining('dashboard')}
+                  </span>
+                </div>
               ) : (
                 <button 
                   onClick={() => handleRewardedVideo('dashboard')}
                   className="flex items-center gap-2 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-gray-900 text-sm px-4 py-2 rounded-lg font-bold transition-all"
                 >
                   <span>🎥</span>
-                  <span>Desbloquear Dashboard</span>
+                  <span>Desbloquear (24h)</span>
                 </button>
               )}
             </div>
@@ -3069,7 +3128,10 @@ function PlayerPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
 
           <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
             <p className="text-blue-300 text-sm">
-              💡 Después del video, podrás acceder al contenido premium de forma gratuita
+              💡 Después del video, el contenido se desbloqueará por <strong>24 horas</strong>
+            </p>
+            <p className="text-gray-400 text-xs mt-2">
+              Podrás acceder al contenido premium sin anuncios durante 24 horas completas
             </p>
           </div>
         </div>
