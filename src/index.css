@@ -1,1 +1,49 @@
 @import "tailwindcss";
+
+@layer base {
+  body {
+    @apply bg-gray-900 text-white min-h-screen;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-gradient-to-r from-yellow-500 to-orange-500 text-gray-900 font-bold px-4 py-2 rounded-lg hover:from-yellow-400 hover:to-orange-400 transition-all duration-200 shadow-lg;
+  }
+  .btn-secondary {
+    @apply bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold px-4 py-2 rounded-lg hover:from-blue-500 hover:to-purple-500 transition-all duration-200;
+  }
+  .btn-danger {
+    @apply bg-red-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-red-500 transition-all duration-200;
+  }
+  .btn-success {
+    @apply bg-green-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-green-500 transition-all duration-200;
+  }
+  .card {
+    @apply bg-gray-800 rounded-xl border border-gray-700 p-6 shadow-xl;
+  }
+  .input-field {
+    @apply w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all;
+  }
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4;
+  }
+  .modal-content {
+    @apply bg-gray-800 rounded-xl border border-gray-600 p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl;
+  }
+}
+
+@layer utilities {
+  .animate-pulse-slow {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    @apply bg-gray-700 rounded;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-gray-500 rounded;
+  }
+}
